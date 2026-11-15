@@ -1,0 +1,23 @@
+# Run with: docker compose up -d --build
+# Then open http://localhost:3000
+services:
+  app:
+    build: .
+    image: exercise-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      # Set to "false" once everyone who needs an account has one.
+      ALLOW_SIGNUPS: "${ALLOW_SIGNUPS:-true}"
+      # Keep "true" when served over HTTPS (and for http://localhost).
+      # Set "false" only for plain HTTP on a trusted home network.
+      SECURE_COOKIES: "${SECURE_COOKIES:-true}"
+      # Number of reverse proxies in front of the app (e.g. 1 for Caddy/nginx).
+      TRUSTED_PROXY_COUNT: "${TRUSTED_PROXY_COUNT:-0}"
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  # Holds the SQLite database. Back this up to keep your training history.
+  app-data:

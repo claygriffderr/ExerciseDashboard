@@ -1,0 +1,242 @@
+// Data model for the 5/3/1 training dashboard.
+//
+// Conventions:
+// - Calendar days are stored as "YYYY-MM-DD" strings. Workouts belong to a day,
+//   not a time, so this avoids time zone bugs and works the same on SQLite and Postgres.
+// - Weights are in pounds (lb). Kilogram support may come later.
+// - A day with no Workout row is a rest day.
+// - Small lists (plates, weekdays, muscles, cues) are JSON-encoded strings so the
+//   schema stays portable between SQLite (local) and Postgres (hosted).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Accounts and authentication ────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  authSessions    AuthSession[]
+  profile         Profile?
+  customExercises Exercise[]
+  enrollments     ProgramEnrollment[]
+  trainingMaxes   TrainingMax[]
+  workouts        Workout[]
+}
+
+// A logged-in browser. The id is the SHA-256 hash of the random token stored in
+// the cookie, so a leaked database cannot be used to hijack sessions.
+model AuthSession {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Fixed-window counters for rate limiting (login attempts, sign-ups).
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+}
+
+// ─── Training profile (filled in during onboarding, editable later) ─────────
+
+enum ExperienceLevel {
+  NEW_TO_LIFTING
+  SOME_EXPERIENCE
+  EXPERIENCED
+}
+
+model Profile {
+  userId              String          @id
+  experienceLevel     ExperienceLevel @default(NEW_TO_LIFTING)
+  barWeight           Float           @default(45)
+  // JSON array of plate weights available per side, e.g. [45,35,25,10,5,2.5]
+  availablePlates     String          @default("[45,35,25,10,5,2.5]")
+  trainingDaysPerWeek Int             @default(3)
+  // JSON array of weekday numbers (0 = Sunday ... 6 = Saturday)
+  trainingWeekdays    String          @default("[1,3,5]")
+  onboardingDoneAt    DateTime?
+  updatedAt           DateTime        @updatedAt
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Exercise library ───────────────────────────────────────────────────────
+
+enum ExerciseCategory {
+  MAIN_LIFT
+  ACCESSORY
+}
+
+// Built-in exercises have ownerId = null. Custom exercises belong to one user.
+model Exercise {
+  id               String           @id @default(cuid())
+  slug             String           @unique
+  name             String
+  category         ExerciseCategory
+  // JSON arrays of muscle group keys, e.g. ["quads","glutes"]
+  primaryMuscles   String           @default("[]")
+  secondaryMuscles String           @default("[]")
+  equipment        String?
+  description      String           @default("")
+  // JSON array of short technique cues
+  techniqueCues    String           @default("[]")
+  imageKey         String?
+  ownerId          String?
+  createdAt        DateTime         @default(now())
+  owner            User?            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  trainingMaxes    TrainingMax[]
+  workoutExercises WorkoutExercise[]
+
+  @@index([ownerId])
+}
+
+// ─── Programs and progression ───────────────────────────────────────────────
+
+enum EnrollmentStatus {
+  ACTIVE
+  ENDED
+}
+
+// A user following one program (e.g. "bbb" or "beginner-onramp"). Program
+// definitions live in code; this row stores the user's choices for it.
+model ProgramEnrollment {
+  id         String           @id @default(cuid())
+  userId     String
+  programKey String
+  // JSON object of program options chosen during onboarding
+  settings   String           @default("{}")
+  startDate  String
+  status     EnrollmentStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now())
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycles     Cycle[]
+
+  @@index([userId, status])
+}
+
+// One pass through the program's weeks (4 weeks for standard 5/3/1).
+model Cycle {
+  id           String            @id @default(cuid())
+  enrollmentId String
+  number       Int
+  startDate    String
+  createdAt    DateTime          @default(now())
+  enrollment   ProgramEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  workouts     Workout[]
+
+  @@unique([enrollmentId, number])
+}
+
+enum MaxSource {
+  TESTED
+  ESTIMATED
+  MANUAL
+  PROGRESSION
+}
+
+// History of training maxes per lift. The newest effectiveDate wins.
+model TrainingMax {
+  id            String    @id @default(cuid())
+  userId        String
+  exerciseId    String
+  oneRepMax     Float?
+  trainingMax   Float
+  source        MaxSource
+  effectiveDate String
+  createdAt     DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise      Exercise  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@index([userId, exerciseId, effectiveDate])
+}
+
+// ─── Workouts and logging ───────────────────────────────────────────────────
+
+enum WorkoutStatus {
+  PLANNED
+  COMPLETED
+  SKIPPED
+}
+
+enum Feeling {
+  GREAT
+  GOOD
+  OKAY
+  COULD_BE_BETTER
+  OFF_GAME
+}
+
+model Workout {
+  id            String            @id @default(cuid())
+  userId        String
+  cycleId       String?
+  scheduledDate String
+  title         String
+  weekNumber    Int?
+  dayNumber     Int?
+  status        WorkoutStatus     @default(PLANNED)
+  feeling       Feeling?
+  notes         String?
+  completedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle         Cycle?            @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  exercises     WorkoutExercise[]
+
+  @@index([userId, scheduledDate])
+}
+
+enum WorkoutSection {
+  WARMUP
+  MAIN
+  SUPPLEMENTAL
+  ACCESSORY
+}
+
+model WorkoutExercise {
+  id         String         @id @default(cuid())
+  workoutId  String
+  exerciseId String
+  section    WorkoutSection
+  order      Int
+  notes      String?
+  workout    Workout        @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise   Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  sets       SetEntry[]
+
+  @@index([workoutId])
+}
+
+model SetEntry {
+  id                String          @id @default(cuid())
+  workoutExerciseId String
+  setNumber         Int
+  targetReps        Int?
+  targetWeight      Float?
+  targetPercent     Float?
+  isAmrap           Boolean         @default(false)
+  actualReps        Int?
+  actualWeight      Float?
+  completed         Boolean         @default(false)
+  workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+
+  @@index([workoutExerciseId])
+}
