@@ -14,7 +14,7 @@ A web app for planning, scheduling and logging strength training built on Jim We
 
 ## Run it locally (for development)
 
-You need **Node.js 22** or newer.
+You need **Node.js 22** (the version the Docker image uses). Newer releases may have no ready-made build of the SQLite driver yet, in which case `npm install` tries to compile it and needs a C++ compiler.
 
 ```bash
 cp .env.example .env      # local settings; the defaults are fine
@@ -24,6 +24,8 @@ npm run dev               # http://localhost:3000
 ```
 
 Open http://localhost:3000, create an account, and you'll land on the dashboard.
+
+**On Windows** (Command Prompt): use `copy .env.example .env` instead of `cp`. If the project folder is synced by OneDrive, pause syncing during `npm install` (or keep the project outside OneDrive), since OneDrive can lock files in `node_modules` and cause `EPERM` errors.
 
 ## Run it with Docker (local or on a server)
 
