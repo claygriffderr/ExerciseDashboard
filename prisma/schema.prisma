@@ -83,12 +83,16 @@ enum ExerciseCategory {
   ACCESSORY
 }
 
-// Built-in exercises have ownerId = null. Custom exercises belong to one user.
+// Built-in exercises have ownerId = null and are synced from
+// src/lib/training/exercises.ts when the server starts. Custom exercises
+// belong to one user.
 model Exercise {
   id               String           @id @default(cuid())
   slug             String           @unique
   name             String
   category         ExerciseCategory
+  // main | push | pull | legs | core
+  pattern          String           @default("push")
   // JSON arrays of muscle group keys, e.g. ["quads","glutes"]
   primaryMuscles   String           @default("[]")
   secondaryMuscles String           @default("[]")
@@ -127,6 +131,7 @@ model ProgramEnrollment {
   createdAt  DateTime         @default(now())
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   cycles     Cycle[]
+  workouts   Workout[]
 
   @@index([userId, status])
 }
@@ -183,25 +188,41 @@ enum Feeling {
   OFF_GAME
 }
 
+// Program workouts form an ordered queue per enrollment (sequence). Their
+// calendar dates are projected from the queue and the person's training days,
+// so a missed workout slides to the next training day instead of being
+// dropped. pinnedDate holds a day the person chose (e.g. a make-up on a rest
+// day); performedDate is the day it was actually done or skipped. Workouts
+// outside any program have no enrollment and use pinnedDate.
 model Workout {
-  id            String            @id @default(cuid())
+  id            String             @id @default(cuid())
   userId        String
+  enrollmentId  String?
   cycleId       String?
-  scheduledDate String
+  sequence      Int?
+  phase         String?
+  templateKey   String?
   title         String
   weekNumber    Int?
   dayNumber     Int?
-  status        WorkoutStatus     @default(PLANNED)
+  guidance      String?
+  pinnedDate    String?
+  performedDate String?
+  status        WorkoutStatus      @default(PLANNED)
   feeling       Feeling?
   notes         String?
   completedAt   DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cycle         Cycle?            @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollment    ProgramEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  cycle         Cycle?             @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   exercises     WorkoutExercise[]
 
-  @@index([userId, scheduledDate])
+  @@unique([enrollmentId, sequence])
+  @@index([userId, status])
+  @@index([userId, performedDate])
+  @@index([userId, pinnedDate])
 }
 
 enum WorkoutSection {
@@ -231,7 +252,10 @@ model SetEntry {
   setNumber         Int
   targetReps        Int?
   targetWeight      Float?
+  targetRepsMax     Int?
   targetPercent     Float?
+  // Stop with this many reps left (beginner practice and test sets)
+  targetRir         Int?
   isAmrap           Boolean         @default(false)
   actualReps        Int?
   actualWeight      Float?

@@ -2,7 +2,7 @@
 
 A web app for planning, scheduling and logging strength training built on Jim Wendler's **5/3/1** method. It's meant to work for a range of people, from experienced lifters to someone picking up a barbell for the first time.
 
-> **Status:** Step 1 of 4 is done: the app foundation, the data model and secure accounts. Program setup, the calendar and workout logging come next (see [Roadmap](#roadmap)).
+> **Status:** Steps 1 and 2 of 4 are done: secure accounts, the 5/3/1 program engine, two programs, the exercise library and the plate calculator. Program setup, the calendar and workout logging come next (see [Roadmap](#roadmap)).
 
 ## Run it locally (for development)
 
@@ -73,8 +73,17 @@ src/proxy.ts                Per-request CSP nonce, signed-out redirects
 src/lib/auth/               Passwords, session tokens, cookies, validation,
                             the data access layer (getCurrentUser / requireUser)
 src/lib/security/           Rate limiting, client IP, safe redirects
+src/lib/training/            The training engine (pure TypeScript, no database):
+  five-three-one.ts           Wave percentages, max estimates, progression
+  plates.ts, equipment.ts     Plate math and rounding to loadable weights
+  exercises.ts, muscles.ts    The built-in exercise catalog
+  programs/                   Program definitions (beginner on-ramp, BBB)
+  schedule.ts                 Workout queue -> calendar dates, time-away advice
+  progress.ts                 Training max changes between cycles
+src/instrumentation.ts      Syncs the exercise catalog into the database at startup
 src/app/(auth)/             Log in, sign up, and their Server Actions
-src/app/(app)/              Signed-in pages (dashboard)
+src/app/(app)/              Signed-in pages (dashboard, programs, exercises)
+src/components/             Plate calculator, muscle map, workout card
 tests/                      Unit tests (npm test)
 ```
 
@@ -82,7 +91,9 @@ tests/                      Unit tests (npm test)
 
 - Weights are in pounds (lb). Kilograms may come later.
 - Calendar days are stored as `YYYY-MM-DD` strings. A day with no workout is a rest day.
-- Program definitions (5/3/1 templates) will live in code. The database stores each person's choices and history.
+- Program definitions (5/3/1 templates) live in code. The database stores each person's choices and history.
+- The built-in exercises live in `src/lib/training/exercises.ts` and are copied into the database each time the server starts. Custom exercises belong to one user.
+- A program is an ordered queue of workouts (`Workout.sequence`). Calendar dates are worked out from the queue and the person's training days, so a missed workout moves to the next training day instead of being dropped. `pinnedDate` holds a day the person chose; `performedDate` is when it was actually done or skipped.
 - Small lists (plates, weekdays, muscles, cues) are JSON strings so the schema moves to Postgres without changes beyond the provider.
 
 ## Scripts
@@ -99,8 +110,8 @@ tests/                      Unit tests (npm test)
 ## Roadmap
 
 1. ~~**Foundation and secure login**~~
-2. **Program engine and exercise library:** 5/3/1 math (training max, the 5s/3s/5-3-1/deload weeks, progression), an always-available plate calculator that rounds to the plates you have and shows options near the target, two programs (Standard 5/3/1 + Boring But Big, and a beginner on-ramp), and an exercise library with technique cues, muscles worked and diagrams.
-3. **Onboarding and calendar:** a guided setup where every choice is explained and editable later, and a month/week calendar of workout and rest days.
+2. ~~**Program engine and exercise library:**~~ 5/3/1 math, the workout queue, an always-available plate calculator, two programs (a beginner on-ramp and Boring But Big), and an exercise library with technique cues and muscle diagrams.
+3. **Onboarding and calendar:** a guided setup where every choice is explained and editable later, and a month/week calendar of workout and rest days. Missed workouts move to the next training day, can be made up on a rest day or skipped, and the app suggests easing back in after time away.
 4. **Session logging and export:** log sets, accessories (built-in and custom), how it felt and notes, and export history as JSON for AI-assisted review.
 
 Later: diet tracking and a progress dashboard.
