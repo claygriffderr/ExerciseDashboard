@@ -3,20 +3,20 @@
 import { useMemo, useState } from "react";
 import { WorkoutCard } from "@/components/workout-card";
 import type { Gear } from "@/lib/training/equipment";
-import { getExercise } from "@/lib/training/exercises";
+import { getExercise, weightIsPerHand } from "@/lib/training/exercises";
 import { LIFT_SLOTS, WAVE, trainingMaxFromOneRepMax, type LiftSlot } from "@/lib/training/five-three-one";
 import { getProgram } from "@/lib/training/programs";
 import type { PlannedWorkout, TrainingMaxes } from "@/lib/training/programs/types";
 
 const SAMPLE_MAXES: Record<string, Record<LiftSlot, string>> = {
-  "standard-bbb": { squat: "225", bench: "185", deadlift: "275", press: "115" },
+  "standard": { squat: "225", bench: "185", deadlift: "275", press: "115" },
   "beginner-onramp": { squat: "60", bench: "30", deadlift: "70", press: "20" },
 };
 
 export function ProgramPreview({ programKey, gear }: { programKey: string; gear: Gear }) {
   const program = getProgram(programKey)!;
   const settings = program.defaultSettings;
-  const [maxes, setMaxes] = useState<Record<LiftSlot, string>>(SAMPLE_MAXES[programKey] ?? SAMPLE_MAXES["standard-bbb"]);
+  const [maxes, setMaxes] = useState<Record<LiftSlot, string>>(SAMPLE_MAXES[programKey] ?? SAMPLE_MAXES["standard"]);
 
   const trainingMaxes: TrainingMaxes = useMemo(() => {
     const out: TrainingMaxes = {};
@@ -65,7 +65,7 @@ export function ProgramPreview({ programKey, gear }: { programKey: string; gear:
             return (
               <label key={slot} className="block text-sm">
                 <span className="font-medium text-ink">{ex.name}</span>
-                {ex.equipment === "dumbbell" && <span className="text-muted"> (per hand)</span>}
+                {weightIsPerHand(ex.slug) && <span className="text-muted"> (per hand)</span>}
                 <input
                   type="number"
                   inputMode="decimal"

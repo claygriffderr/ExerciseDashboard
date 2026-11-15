@@ -1,4 +1,4 @@
-import { AMRAP_GOALS, STANDARD_INCREMENTS, WAVE, type LiftSlot } from "../five-three-one";
+import { AMRAP_GOALS, FIRST_SET_PERCENT, STANDARD_INCREMENTS, WAVE, type LiftSlot } from "../five-three-one";
 import { mainLiftBlocks, selfLoadedSets, volumeSets } from "./builders";
 import type { PlannedWorkout, ProgramDefinition } from "./types";
 
@@ -10,18 +10,18 @@ const DAYS: { slot: LiftSlot; title: string; accessory: { slug: string; sets: nu
   { slot: "squat", title: "Squat day", accessory: { slug: "leg-curl", sets: 5, reps: 10 } },
 ];
 
-export const standardBbb: ProgramDefinition = {
-  key: "standard-bbb",
-  name: "5/3/1 Boring But Big",
-  tagline: "The classic: one main lift a day, then lots of lighter volume.",
+export const standard531: ProgramDefinition = {
+  key: "standard",
+  name: "Standard 5/3/1",
+  tagline: "The classic: one main lift a day, heavy sets, then as much volume as suits you.",
   audience:
     "Lifters who already know the squat, bench press, deadlift and overhead press and can lift with good form. Typically people with at least a few months of steady training.",
   summary:
-    "Each session centers on one of the four main lifts. You do three heavy sets that follow a four-week wave, then five sets of ten with a lighter weight to build muscle, then one assistance exercise. Your training max goes up a little after every cycle.",
+    "Each session centers on one of the four main lifts. You do three heavy sets that follow a four-week wave, then (depending on the volume you choose) extra sets with a lighter weight to build muscle, then one assistance exercise. Your training max goes up a little after every cycle.",
   benefits: [
     "Slow, steady progress you can keep up for years: about 5 lb a month on upper-body lifts and 10 lb on lower-body lifts.",
     "Starting from a training max below your true max means most sets feel manageable, so you practice good reps instead of grinding.",
-    "The 5×10 supplemental sets add a lot of volume, which is one of the strongest drivers of muscle growth.",
+    "You choose your volume: Boring But Big's 5×10 adds a lot of work, which is one of the strongest drivers of muscle growth; First Set Last's 5×5 is a moderate middle ground.",
     "The last set of each week shows how you're progressing without needing a max-out day.",
   ],
   whatItInvolves: [
@@ -29,18 +29,18 @@ export const standardBbb: ProgramDefinition = {
     "Warm-up: 40%, 50% and 60% of your training max.",
     "Main sets follow the wave: 5s week (65/75/85%), 3s week (70/80/90%), 5/3/1 week (75/85/95%), then a light deload week.",
     "The last main set is 'as many reps as possible' with good form, leaving a rep or two in reserve.",
-    "Boring But Big: 5 sets of 10 at 50 to 60% of the training max of the same lift.",
+    "Extra volume, your choice: Boring But Big (5 sets of 10 at 50 to 60%), First Set Last (5 sets of 5 at your first work-set weight), or none.",
     "One assistance exercise, as in Wendler's original template: chin-ups, hanging leg raises, dumbbell rows or leg curls.",
     "Sessions take about 45 to 75 minutes.",
   ],
   thingsToKnow: [
     "Last-set targets: about " + AMRAP_GOALS[1] + " reps in the 5s week, " + AMRAP_GOALS[2] + " in the 3s week and " + AMRAP_GOALS[3] + " in the 5/3/1 week.",
     "If you can't get the minimum reps on a last set, lower that lift's training max by 10% and build back up.",
-    "5×10 is demanding. Start at 50% and only move to 60% once it feels comfortable.",
+    "Boring But Big's 5×10 is demanding. Start at 50% and only move to 60% once it feels comfortable. If you're short on time or recovering poorly, First Set Last is the gentler choice.",
   ],
   sources: [
     { label: "Jim Wendler, 5/3/1: The Simplest and Most Effective Training System for Raw Strength (2nd ed., 2011)" },
-    { label: "Jim Wendler, Boring But Big template, in Beyond 5/3/1 (2013)" },
+    { label: "Jim Wendler, Boring But Big and First Set Last templates, in Beyond 5/3/1 (2013)" },
     { label: "Strength Insider: 5/3/1 program guide", url: "https://strengthinsider.com/workout-programs/531-program/" },
   ],
   daysPerWeekOptions: [2, 3, 4],
@@ -49,6 +49,7 @@ export const standardBbb: ProgramDefinition = {
     variants: { squat: "back-squat", bench: "bench-press", deadlift: "deadlift", press: "overhead-press" },
     trainingMaxPercent: 0.9,
     waveStyle: "classic",
+    supplemental: "bbb",
     supplementalPercent: 0.5,
     includeDeload: true,
     increments: STANDARD_INCREMENTS,
@@ -56,9 +57,33 @@ export const standardBbb: ProgramDefinition = {
   },
   options: [
     {
+      key: "supplemental",
+      label: "Volume",
+      explanation: "How much extra work follows your three main sets. More volume builds more muscle but takes longer and needs more recovery.",
+      choices: [
+        {
+          value: "bbb",
+          label: "High: Boring But Big",
+          explanation: "5 sets of 10 at a light weight. The most muscle-building work; sessions run about an hour.",
+          recommended: true,
+        },
+        {
+          value: "fsl",
+          label: "Moderate: First Set Last",
+          explanation: "5 sets of 5 at your first work-set weight. Good practice and steady volume in less time.",
+        },
+        {
+          value: "none",
+          label: "Low: main sets only",
+          explanation: "Just the three main sets and assistance. For busy weeks, or if you do other sports.",
+        },
+      ],
+    },
+    {
       key: "supplementalPercent",
       label: "Boring But Big weight",
       explanation: "How heavy the 5 sets of 10 are, as a share of your training max.",
+      showWhen: (s) => s.supplemental === "bbb",
       choices: [
         { value: 0.5, label: "50%", explanation: "Wendler's starting point. Still hard by the last set.", recommended: true },
         { value: 0.6, label: "60%", explanation: "For when 50% has started to feel easy." },
@@ -97,18 +122,33 @@ export const standardBbb: ProgramDefinition = {
         const slug = settings.variants[day.slot];
         const exercises = mainLiftBlocks({ slot: day.slot, exerciseSlug: slug, week, style: settings.waveStyle, tms: trainingMaxes, gear });
         if (week !== 4) {
-          exercises.push(
-            volumeSets({
-              slot: day.slot,
-              exerciseSlug: slug,
-              percent: settings.supplementalPercent,
-              sets: 5,
-              reps: 10,
-              tms: trainingMaxes,
-              gear,
-              note: "Boring But Big",
-            }),
-          );
+          if (settings.supplemental === "bbb") {
+            exercises.push(
+              volumeSets({
+                slot: day.slot,
+                exerciseSlug: slug,
+                percent: settings.supplementalPercent,
+                sets: 5,
+                reps: 10,
+                tms: trainingMaxes,
+                gear,
+                note: "Boring But Big",
+              }),
+            );
+          } else if (settings.supplemental === "fsl") {
+            exercises.push(
+              volumeSets({
+                slot: day.slot,
+                exerciseSlug: slug,
+                percent: FIRST_SET_PERCENT[week],
+                sets: 5,
+                reps: 5,
+                tms: trainingMaxes,
+                gear,
+                note: "First Set Last",
+              }),
+            );
+          }
           exercises.push(selfLoadedSets(day.accessory.slug, "ACCESSORY", day.accessory.sets, day.accessory.reps));
         }
         out.push({
@@ -119,7 +159,7 @@ export const standardBbb: ProgramDefinition = {
           day: i + 1,
           guidance:
             week === 4
-              ? "Deload: keep it light and quick. Skip the 5×10 today."
+              ? "Deload: keep it light and quick. No extra volume today."
               : `${WAVE[week].name}. Last main set: as many good reps as you can, aiming for about ${AMRAP_GOALS[week as 1 | 2 | 3]}.`,
           exercises,
         });

@@ -47,7 +47,9 @@ export type ProgramSettings = {
   /** Training max as a fraction of the one-rep max. */
   trainingMaxPercent: number;
   waveStyle: WaveStyle;
-  /** Supplemental volume as a fraction of the training max (BBB). */
+  /** Extra volume after the main sets: 5×10 (BBB), 5×5 (First Set Last) or none. */
+  supplemental: "bbb" | "fsl" | "none";
+  /** Boring But Big weight as a fraction of the training max. */
   supplementalPercent: number;
   includeDeload: boolean;
   increments: ProgressionIncrements;
@@ -68,6 +70,8 @@ export type ProgramOption = {
   label: string;
   explanation: string;
   choices: ChoiceOption<string | number | boolean>[];
+  /** Only ask when this returns true for the current settings. */
+  showWhen?: (settings: ProgramSettings) => boolean;
 };
 
 export type Phase = {

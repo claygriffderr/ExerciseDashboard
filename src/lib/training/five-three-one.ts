@@ -67,6 +67,9 @@ export const WAVE: Record<1 | 2 | 3 | 4, { name: string; sets: SetScheme[] }> = 
   },
 };
 
+/** First work-set percentage each week (used for First Set Last volume). */
+export const FIRST_SET_PERCENT: Record<1 | 2 | 3 | 4, number> = { 1: 0.65, 2: 0.7, 3: 0.75, 4: 0.4 };
+
 /** Reps you should beat on the last set of each week before calling it a good set. */
 export const AMRAP_GOALS: Record<1 | 2 | 3, string> = { 1: "8 to 12", 2: "5 to 8", 3: "3 to 5" };
 

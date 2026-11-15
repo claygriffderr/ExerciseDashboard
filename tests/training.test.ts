@@ -141,8 +141,18 @@ describe("exercise catalog", () => {
 describe("programs", () => {
   const tms = { squat: 200, bench: 150, deadlift: 250, press: 100 };
 
+  it("Standard 5/3/1 offers three volume levels", () => {
+    const p = getProgram("standard")!;
+    const build = (supplemental: "bbb" | "fsl" | "none") =>
+      p.buildCycle({ settings: { ...p.defaultSettings, supplemental }, trainingMaxes: tms, gear: DEFAULT_GEAR, cycle: 1 })[0];
+    const fsl = build("fsl").exercises.find((e) => e.section === "SUPPLEMENTAL")!;
+    assert.deepEqual(fsl.sets.map((s) => [s.reps, s.weight]), Array(5).fill([5, 65]));
+    assert.equal(build("none").exercises.some((e) => e.section === "SUPPLEMENTAL"), false);
+    assert.equal(p.options.find((o) => o.key === "supplementalPercent")?.showWhen?.({ ...p.defaultSettings, supplemental: "fsl" }), false);
+  });
+
   it("Boring But Big: 4 sessions a week, deload optional", () => {
-    const p = getProgram("standard-bbb")!;
+    const p = getProgram("standard")!;
     const cycle = p.buildCycle({ settings: p.defaultSettings, trainingMaxes: tms, gear: DEFAULT_GEAR, cycle: 1 });
     assert.equal(cycle.length, 16);
     const noDeload = p.buildCycle({

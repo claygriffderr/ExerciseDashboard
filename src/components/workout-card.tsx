@@ -59,11 +59,11 @@ function ExerciseRow({ e }: { e: PlannedExercise }) {
   );
 }
 
-export function WorkoutCard({ workout }: { workout: PlannedWorkout }) {
+export function WorkoutCard({ workout, showTitle = true }: { workout: PlannedWorkout; showTitle?: boolean }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-4">
-      <h3 className="font-semibold text-ink">{workout.title}</h3>
-      {workout.guidance && <p className="mt-1 text-sm text-muted">{workout.guidance}</p>}
+      {showTitle && <h3 className="font-semibold text-ink">{workout.title}</h3>}
+      {workout.guidance && <p className={`${showTitle ? "mt-1" : ""} text-sm text-muted`}>{workout.guidance}</p>}
       <ul className="mt-2 divide-y divide-line">
         {workout.exercises.map((e, i) => (
           <ExerciseRow key={i} e={e} />

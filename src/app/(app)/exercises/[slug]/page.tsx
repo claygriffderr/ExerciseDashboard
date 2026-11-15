@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { MuscleLegend, MuscleMap } from "@/components/muscle-map";
 import { requireUser } from "@/lib/auth/dal";
 import { EQUIPMENT_LABELS } from "@/lib/training/equipment";
-import { EXERCISE_BY_SLUG, PATTERN_LABELS, slotVariants } from "@/lib/training/exercises";
+import { EXERCISE_BY_SLUG, PATTERN_LABELS, slotVariants, weightIsPerHand } from "@/lib/training/exercises";
 import { LIFT_SLOTS } from "@/lib/training/five-three-one";
 import { MUSCLE_LABELS } from "@/lib/training/muscles";
 
@@ -32,7 +32,7 @@ export default async function ExercisePage({ params }: PageProps<"/exercises/[sl
           <p className="mt-1 text-muted">
             {PATTERN_LABELS[e.pattern]}
             {slotLabel && e.pattern === "main" ? ` (${slotLabel.toLowerCase()} slot)` : ""} · {EQUIPMENT_LABELS[e.equipment]}
-            {e.equipment === "dumbbell" ? " · weights are per hand" : ""}
+            {weightIsPerHand(e.slug) ? " · weights are per hand" : ""}
           </p>
           {e.beginnerFriendly && (
             <span className="mt-3 inline-block rounded-full bg-accent/10 px-2.5 py-0.5 text-sm font-medium text-accent">
