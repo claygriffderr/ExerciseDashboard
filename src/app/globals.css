@@ -10,6 +10,8 @@
   --accent-strong: #2259b8;
   --accent-ink: #ffffff;
   --danger: #c2362b;
+  --body: #e4e8ee;
+  --muscle-idle: #cfd5de;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +25,8 @@
     --accent-strong: #79a5f5;
     --accent-ink: #0b1220;
     --danger: #f0786e;
+    --body: #252a33;
+    --muscle-idle: #343a45;
   }
 }
 

@@ -4,7 +4,7 @@ import { sessionCookieName, sessionCookieOptions } from "@/lib/auth/cookie";
 import { SESSION_TTL_MS } from "@/lib/auth/tokens";
 
 /** Paths that need a signed-in user. The real check happens in each page. */
-const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/calendar", "/workouts", "/settings"];
+const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/calendar", "/workouts", "/settings", "/programs", "/exercises"];
 
 function contentSecurityPolicy(nonce: string): string {
   const isDev = process.env.NODE_ENV === "development";
