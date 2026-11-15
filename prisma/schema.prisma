@@ -71,6 +71,8 @@ model Profile {
   trainingDaysPerWeek Int             @default(3)
   // JSON array of weekday numbers (0 = Sunday ... 6 = Saturday)
   trainingWeekdays    String          @default("[1,3,5]")
+  // IANA time zone from the browser, used to work out "today"
+  timezone            String          @default("UTC")
   onboardingDoneAt    DateTime?
   updatedAt           DateTime        @updatedAt
   user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -128,6 +130,8 @@ model ProgramEnrollment {
   settings   String           @default("{}")
   startDate  String
   status     EnrollmentStatus @default(ACTIVE)
+  // Last-workout date for which the "welcome back" advice was already handled
+  gapHandledAfter String?
   createdAt  DateTime         @default(now())
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   cycles     Cycle[]

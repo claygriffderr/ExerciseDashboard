@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/dal";
+import { rebuildPlannedQueue } from "@/lib/plan/store";
 import { ALL_PLATE_SIZES } from "@/lib/training/plates";
 
 const plateSettingsSchema = z.object({
@@ -24,6 +25,8 @@ export async function savePlateSettings(input: { barWeight: number; plates: numb
     create: { userId: user.id, barWeight: parsed.data.barWeight, availablePlates: JSON.stringify(plates) },
     update: { barWeight: parsed.data.barWeight, availablePlates: JSON.stringify(plates) },
   });
+  // Planned weights are rounded to the plates, so refresh them.
+  await rebuildPlannedQueue(user.id);
   revalidatePath("/", "layout");
   return { ok: true };
 }

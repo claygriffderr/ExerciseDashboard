@@ -32,6 +32,8 @@ export type CatalogExercise = {
   cues: string[];
   /** A safer or simpler way to do it. */
   easier?: string;
+  /** One dumbbell held in both hands (goblet squat), so its weight isn't per hand. */
+  heldWithBothHands?: boolean;
 };
 
 export const EXERCISES: CatalogExercise[] = [
@@ -64,6 +66,7 @@ export const EXERCISES: CatalogExercise[] = [
     slot: "squat",
     pattern: "main",
     equipment: "dumbbell",
+    heldWithBothHands: true,
     primary: ["quads", "glutes"],
     secondary: ["adductors", "abs", "upper_back"],
     beginnerFriendly: true,
@@ -655,6 +658,12 @@ export function getExercise(slug: string): CatalogExercise {
   const e = EXERCISE_BY_SLUG.get(slug);
   if (!e) throw new Error(`Unknown exercise: ${slug}`);
   return e;
+}
+
+/** Dumbbell exercises with a weight in each hand, where the weight is per hand. */
+export function weightIsPerHand(slug: string): boolean {
+  const e = EXERCISE_BY_SLUG.get(slug);
+  return !!e && e.equipment === "dumbbell" && !e.heldWithBothHands;
 }
 
 /** Exercises that can fill a main-lift slot, standard choice first. */

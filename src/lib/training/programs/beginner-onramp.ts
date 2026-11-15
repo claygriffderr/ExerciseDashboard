@@ -1,4 +1,4 @@
-import { GENTLE_INCREMENTS, type LiftSlot } from "../five-three-one";
+import { FIRST_SET_PERCENT, GENTLE_INCREMENTS, type LiftSlot } from "../five-three-one";
 import { mainLiftBlocks, selfLoadedSets, volumeSets } from "./builders";
 import type { PlannedExercise, PlannedWorkout, ProgramDefinition, ProgramSettings } from "./types";
 
@@ -77,7 +77,8 @@ export const beginnerOnramp: ProgramDefinition = {
     },
     trainingMaxPercent: 0.85,
     waveStyle: "fives-pro",
-    supplementalPercent: 0.65,
+    supplemental: "fsl",
+    supplementalPercent: 0.5,
     includeDeload: false,
     increments: GENTLE_INCREMENTS,
     learnWeeks: 2,
@@ -168,7 +169,6 @@ export const beginnerOnramp: ProgramDefinition = {
     const weeks: (1 | 2 | 3 | 4)[] = settings.includeDeload ? [1, 2, 3, 4] : [1, 2, 3];
     // With two days a week, alternate A (squat + bench) and B (deadlift + press).
     const days = perWeek === 2 ? [MAIN_DAYS[0], MAIN_DAYS[1]] : MAIN_DAYS;
-    const firstSetPercent: Record<1 | 2 | 3 | 4, number> = { 1: 0.65, 2: 0.7, 3: 0.75, 4: 0.4 };
     const out: PlannedWorkout[] = [];
 
     for (const week of weeks) {
@@ -191,7 +191,7 @@ export const beginnerOnramp: ProgramDefinition = {
               volumeSets({
                 slot,
                 exerciseSlug: slug,
-                percent: firstSetPercent[week],
+                percent: FIRST_SET_PERCENT[week],
                 sets: 5,
                 reps: 5,
                 tms: trainingMaxes,

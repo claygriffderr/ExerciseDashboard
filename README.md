@@ -2,11 +2,19 @@
 
 A web app for planning, scheduling and logging strength training built on Jim Wendler's **5/3/1** method. It's meant to work for a range of people, from experienced lifters to someone picking up a barbell for the first time.
 
-> **Status:** Steps 1 and 2 of 4 are done: secure accounts, the 5/3/1 program engine, two programs, the exercise library and the plate calculator. Program setup, the calendar and workout logging come next (see [Roadmap](#roadmap)).
+> **Status:** Steps 1 to 3 of 4 are done: secure accounts, the 5/3/1 program engine, two programs, the exercise library, the plate calculator, guided setup and the training calendar. Workout logging and export come next (see [Roadmap](#roadmap)).
+
+## Using it
+
+1. **Sign up and set up your plan.** A guided setup asks about your experience, program, training days, main lifts, program options, equipment and starting weights. Every choice explains what it means, and all of them can be changed later in **Settings**.
+2. **Follow the calendar.** Each month shows workout and rest days. Click a workout to see its sets and weights, mark it done, skip it, or move it to another day (on a computer you can also drag it).
+3. **Miss a day? Nothing is lost.** Workouts are a list done in order: a missed workout moves to your next training day. After two or more weeks away, the calendar suggests repeating a week or lowering your weights a little.
+4. **Beginners find their numbers safely.** The beginner on-ramp starts with practice weeks, then two test sessions where you record a comfortable set of 5. Training maxes are worked out from those, with no maxing out.
+5. **Plates** (bottom corner, every page) shows how to load the bar, with options close to your target weight.
 
 ## Run it locally (for development)
 
-You need **Node.js 22** or newer.
+You need **Node.js 22** (the version the Docker image uses). Newer releases may have no ready-made build of the SQLite driver yet, in which case `npm install` tries to compile it and needs a C++ compiler.
 
 ```bash
 cp .env.example .env      # local settings; the defaults are fine
@@ -16,6 +24,8 @@ npm run dev               # http://localhost:3000
 ```
 
 Open http://localhost:3000, create an account, and you'll land on the dashboard.
+
+**On Windows** (Command Prompt): use `copy .env.example .env` instead of `cp`. If the project folder is synced by OneDrive, pause syncing during `npm install` (or keep the project outside OneDrive), since OneDrive can lock files in `node_modules` and cause `EPERM` errors.
 
 ## Run it with Docker (local or on a server)
 
@@ -77,20 +87,26 @@ src/lib/training/            The training engine (pure TypeScript, no database):
   five-three-one.ts           Wave percentages, max estimates, progression
   plates.ts, equipment.ts     Plate math and rounding to loadable weights
   exercises.ts, muscles.ts    The built-in exercise catalog
-  programs/                   Program definitions (beginner on-ramp, BBB)
+  programs/                   Program definitions (beginner on-ramp, standard 5/3/1)
   schedule.ts                 Workout queue -> calendar dates, time-away advice
   progress.ts                 Training max changes between cycles
+src/lib/plan/                A person's plan: setup answers (settings.ts, draft.ts),
+                            calendar layout (calendar.ts), and the database side
+                            (store.ts: plans, queue, cycles; workouts.ts: move,
+                            skip, done, undo, test results, time away)
 src/instrumentation.ts      Syncs the exercise catalog into the database at startup
 src/app/(auth)/             Log in, sign up, and their Server Actions
-src/app/(app)/              Signed-in pages (dashboard, programs, exercises)
-src/components/             Plate calculator, muscle map, workout card
+src/app/(app)/              Signed-in pages (dashboard, calendar, workouts,
+                            onboarding, settings, programs, exercises) and the
+                            plan Server Actions (plan-actions.ts)
+src/components/             Setup wizard, plate calculator, muscle map, workout card
 tests/                      Unit tests (npm test)
 ```
 
 ### Data model notes
 
 - Weights are in pounds (lb). Kilograms may come later.
-- Calendar days are stored as `YYYY-MM-DD` strings. A day with no workout is a rest day.
+- Calendar days are stored as `YYYY-MM-DD` strings. A day with no workout is a rest day. "Today" comes from the time zone the browser reported during setup (`Profile.timezone`).
 - Program definitions (5/3/1 templates) live in code. The database stores each person's choices and history.
 - The built-in exercises live in `src/lib/training/exercises.ts` and are copied into the database each time the server starts. Custom exercises belong to one user.
 - A program is an ordered queue of workouts (`Workout.sequence`). Calendar dates are worked out from the queue and the person's training days, so a missed workout moves to the next training day instead of being dropped. `pinnedDate` holds a day the person chose; `performedDate` is when it was actually done or skipped.
@@ -110,8 +126,8 @@ tests/                      Unit tests (npm test)
 ## Roadmap
 
 1. ~~**Foundation and secure login**~~
-2. ~~**Program engine and exercise library:**~~ 5/3/1 math, the workout queue, an always-available plate calculator, two programs (a beginner on-ramp and Boring But Big), and an exercise library with technique cues and muscle diagrams.
-3. **Onboarding and calendar:** a guided setup where every choice is explained and editable later, and a month/week calendar of workout and rest days. Missed workouts move to the next training day, can be made up on a rest day or skipped, and the app suggests easing back in after time away.
+2. ~~**Program engine and exercise library:**~~ 5/3/1 math, the workout queue, an always-available plate calculator, two programs (a beginner on-ramp and standard 5/3/1), and an exercise library with technique cues and muscle diagrams.
+3. ~~**Onboarding and calendar:**~~ a guided setup where every choice is explained and editable later in Settings, and a month calendar of workout and rest days (an agenda list on phones). Missed workouts move to the next training day, can be moved to a rest day or skipped, and the app suggests easing back in after time away. Standard 5/3/1 lets you choose your volume: Boring But Big (5×10), First Set Last (5×5) or main sets only.
 4. **Session logging and export:** log sets, accessories (built-in and custom), how it felt and notes, and export history as JSON for AI-assisted review.
 
 Later: diet tracking and a progress dashboard.

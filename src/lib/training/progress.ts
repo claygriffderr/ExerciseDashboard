@@ -11,11 +11,17 @@ import type { TrainingMaxes } from "./programs/types";
 
 /**
  * Turn the beginner on-ramp's test set (5 reps with about 2 in reserve) into
- * a training max, rounded down to a whole 5 lb so the first cycle is easy.
+ * a training max, rounded down to a whole 5 lb (1 lb for very light weights)
+ * so the first cycle is easy.
  */
 export function trainingMaxFromTestSet(weight: number, reps: number, repsInReserve: number, fraction: number): number {
   const estimate = estimateOneRepMaxFromSubmax(weight, reps, repsInReserve);
-  return Math.floor(trainingMaxFromOneRepMax(estimate, fraction) / 5) * 5;
+  return roundTrainingMaxDown(trainingMaxFromOneRepMax(estimate, fraction));
+}
+
+/** Round down to 5 lb, or to 1 lb for very light weights (which would otherwise vanish). */
+export function roundTrainingMaxDown(tm: number): number {
+  return tm >= 20 ? Math.floor(tm / 5) * 5 : Math.floor(tm);
 }
 
 export type CycleOutcome = {
@@ -40,18 +46,18 @@ export function progressTrainingMaxes(
     const tm = current[slot];
     if (tm === undefined) continue;
     const missed = outcomes[slot]?.missedReps ?? false;
-    const to = missed ? Math.floor(resetTrainingMax(tm) / 5) * 5 : nextTrainingMax(tm, slot, increments);
+    const to = missed ? roundTrainingMaxDown(resetTrainingMax(tm)) : nextTrainingMax(tm, slot, increments);
     next[slot] = to;
     changes.push({ slot, from: tm, to, reason: missed ? "reset" : "progress" });
   }
   return { next, changes };
 }
 
-/** Lower every training max by a fraction (after a long break), rounded down to 5 lb. */
+/** Lower every training max by a fraction (after a long break), rounded down. */
 export function lowerTrainingMaxes(current: TrainingMaxes, fraction: number): TrainingMaxes {
   const out: TrainingMaxes = {};
   for (const [slot, tm] of Object.entries(current) as [LiftSlot, number][]) {
-    out[slot] = Math.floor((tm * (1 - fraction)) / 5) * 5;
+    out[slot] = roundTrainingMaxDown(tm * (1 - fraction));
   }
   return out;
 }
