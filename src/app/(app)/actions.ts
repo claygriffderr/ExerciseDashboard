@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/dal";
 import { rebuildPlannedQueue } from "@/lib/plan/store";
 import { ALL_PLATE_SIZES } from "@/lib/training/plates";
+import { restSettingsSchema } from "@/lib/log/rest";
 
 const plateSettingsSchema = z.object({
   barWeight: z.number().min(0).max(100),
@@ -28,5 +29,15 @@ export async function savePlateSettings(input: { barWeight: number; plates: numb
   // Planned weights are rounded to the plates, so refresh them.
   await rebuildPlannedQueue(user.id);
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Save rest timer preferences. No page refresh: the workout page keeps its own copy. */
+export async function saveRestSettings(input: unknown): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  const parsed = restSettingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Those rest times weren't valid. Reload the page and try again." };
+  const restTimer = JSON.stringify(parsed.data);
+  await prisma.profile.upsert({ where: { userId: user.id }, create: { userId: user.id, restTimer }, update: { restTimer } });
   return { ok: true };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { formatShort } from "@/lib/dates";
 import {
   CUSTOM_EQUIPMENT,
@@ -15,6 +15,7 @@ import {
   toLog,
   type WorkoutLog,
 } from "@/lib/log/schema";
+import { restAfterTick, type RestSettings } from "@/lib/log/rest";
 import type { ActionResult } from "@/lib/plan/workouts";
 import { EQUIPMENT_LABELS } from "@/lib/training/equipment";
 import { PATTERN_LABELS } from "@/lib/training/exercises";
@@ -28,6 +29,7 @@ import {
   undoWorkoutAction,
   unpinWorkoutAction,
 } from "../../plan-actions";
+import { RestCountdown, RestSettingsPanel, useRestTimer } from "./rest-timer";
 
 // ─── Types passed from the page ─────────────────────────────────────────────
 
@@ -56,6 +58,7 @@ export type SessionProps = {
   feeling: Feeling | null;
   notes: string;
   library: LibraryExercise[];
+  rest: RestSettings;
   /** Null when the workout belongs to an earlier plan: logging only. */
   plan: {
     isNext: boolean;
@@ -129,14 +132,32 @@ export function WorkoutSession(props: SessionProps) {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const save = useAction();
   const isTest = props.phase === "find";
+  const [restSettings, setRestSettings] = useState(props.rest);
+  const timer = useRestTimer(props.workoutId);
+  const live = props.status === "PLANNED";
+  const timing = live && restSettings.enabled;
+  const sections = [...new Set(exercises.map((e) => e.section))];
 
   const change = (fn: (list: ExerciseDraft[]) => ExerciseDraft[]) => {
     setExercises(fn);
     setDirty(true);
     setSavedAt(null);
   };
-  const updateSet = (ei: number, si: number, patch: Partial<SetDraft>) =>
-    change((list) => list.map((e, i) => (i !== ei ? e : { ...e, sets: e.sets.map((s, j) => (j !== si ? s : { ...s, ...patch })) })));
+  /** Start the rest timer after a tick, from the exercises as they are once the tick lands. */
+  const restAfter = (after: ExerciseDraft[], ei: number, setKey: string) => {
+    if (!timing) return;
+    const next = restAfterTick(after, ei);
+    if (!next) return timer.clear();
+    timer.start({ exerciseKey: after[ei].key, setKey, label: next.label, total: restSettings.seconds[next.key] });
+  };
+  const updateSet = (ei: number, si: number, patch: Partial<SetDraft>) => {
+    const apply = (list: ExerciseDraft[]) =>
+      list.map((e, i) => (i !== ei ? e : { ...e, sets: e.sets.map((s, j) => (j !== si ? s : { ...s, ...patch })) }));
+    const before = exercises[ei]?.sets[si];
+    if (before && patch.done === true && !before.done) restAfter(apply(exercises), ei, before.key);
+    if (before && patch.done === false && timer.rest?.setKey === before.key) timer.clear();
+    change(apply);
+  };
 
   const log = () => toLog(exercises, feeling, notes);
   const saveLog = () =>
@@ -161,8 +182,22 @@ export function WorkoutSession(props: SessionProps) {
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
       <div className="min-w-0 space-y-4">
-        {props.guidance && (
-          <p className="rounded-2xl border border-line bg-surface p-4 text-sm leading-6 text-muted">{props.guidance}</p>
+        {(props.guidance || live) && (
+          <div className="rounded-2xl border border-line bg-surface p-4 text-sm">
+            {props.guidance && <p className="leading-6 text-muted">{props.guidance}</p>}
+            {live && (
+              <div className={props.guidance ? "mt-3 border-t border-line pt-3" : ""}>
+                <RestSettingsPanel
+                  settings={restSettings}
+                  sections={sections}
+                  onChange={(next) => {
+                    setRestSettings(next);
+                    if (!next.enabled) timer.clear();
+                  }}
+                />
+              </div>
+            )}
+          </div>
         )}
         {isTest && props.status === "PLANNED" && (
           <p className="rounded-2xl border border-accent/40 bg-accent/5 p-4 text-sm leading-6 text-ink">
@@ -189,8 +224,8 @@ export function WorkoutSession(props: SessionProps) {
               )
             }
             onRemoveSet={(si) => change((list) => list.map((x, i) => (i !== ei ? x : { ...x, sets: x.sets.filter((_, j) => j !== si) })))}
-            onAllDone={() =>
-              change((list) =>
+            onAllDone={() => {
+              const apply = (list: ExerciseDraft[]) =>
                 list.map((x, i) =>
                   i !== ei
                     ? x
@@ -203,8 +238,19 @@ export function WorkoutSession(props: SessionProps) {
                           reps: s.reps || (s.target?.reps != null && !s.target.amrap ? String(s.target.reps) : ""),
                         })),
                       },
-                ),
-              )
+                );
+              restAfter(apply(exercises), ei, `all-${e.key}`);
+              change(apply);
+            }}
+            rest={
+              timing && timer.rest?.exerciseKey === e.key ? (
+                <RestCountdown
+                  key={timer.rest.setKey}
+                  rest={timer.rest}
+                  onExtend={() => timer.extend(30)}
+                  onHide={timer.clear}
+                />
+              ) : null
             }
             onRemove={() => change((list) => list.filter((_, i) => i !== ei))}
           />
@@ -312,6 +358,7 @@ function ExerciseCard({
   onRemoveSet,
   onAllDone,
   onRemove,
+  rest,
 }: {
   e: ExerciseDraft;
   onSet: (si: number, patch: Partial<SetDraft>) => void;
@@ -319,6 +366,8 @@ function ExerciseCard({
   onRemoveSet: (si: number) => void;
   onAllDone: () => void;
   onRemove: () => void;
+  /** The rest timer, when it belongs under this exercise. */
+  rest: ReactNode;
 }) {
   const done = e.sets.filter((s) => s.done).length;
   return (
@@ -366,6 +415,7 @@ function ExerciseCard({
           </button>
         )}
       </div>
+      {rest}
     </section>
   );
 }

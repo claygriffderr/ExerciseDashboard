@@ -10,7 +10,7 @@ A web app for planning, scheduling and logging strength training built on Jim We
 2. **Follow the calendar.** Each month shows workout and rest days. Click a workout to see its sets and weights, mark it done, skip it, or move it to another day (on a computer you can also drag it).
 3. **Miss a day? Nothing is lost.** Workouts are a list done in order: a missed workout moves to your next training day. After two or more weeks away, the calendar suggests repeating a week or lowering your weights a little.
 4. **Beginners find their numbers safely.** The beginner on-ramp starts with practice weeks, then two test sessions where you record a comfortable set of 5. Training maxes are worked out from those, with no maxing out.
-5. **Log each session.** On a workout, enter the weight and reps of each set (tick a set to log it as planned), add assistance exercises from the library or create your own, pick how it felt, and write notes.
+5. **Log each session.** On a workout, enter the weight and reps of each set (tick a set to log it as planned), add assistance exercises from the library or create your own, pick how it felt, and write notes. A gentle **rest timer** starts when you tick a set and turns green when the break is over. Change the times (between sets of each kind, and between exercises) or turn it off in the box at the top of the workout.
 6. **Export your history** from the Export page as a JSON file with dates, planned and logged sets, ratings and notes. It explains itself, so you can hand it to an AI assistant (a starting prompt is on the page).
 7. **Plates** (bottom corner, every page) shows how to load the bar, with options close to your target weight.
 
@@ -26,6 +26,8 @@ npm run dev               # http://localhost:3000
 ```
 
 Open http://localhost:3000, create an account, and you'll land on the dashboard.
+
+**After pulling new changes**, run `npm install` and `npm run db:migrate` again before `npm run dev`, so the database client and tables match the code.
 
 **On Windows** (Command Prompt): use `copy .env.example .env` instead of `cp`. If the project folder is synced by OneDrive, pause syncing during `npm install` (or keep the project outside OneDrive), since OneDrive can lock files in `node_modules` and cause `EPERM` errors.
 
@@ -133,5 +135,6 @@ tests/                      Unit tests (npm test)
 2. ~~**Program engine and exercise library:**~~ 5/3/1 math, the workout queue, an always-available plate calculator, two programs (a beginner on-ramp and standard 5/3/1), and an exercise library with technique cues and muscle diagrams.
 3. ~~**Onboarding and calendar:**~~ a guided setup where every choice is explained and editable later in Settings, and a month calendar of workout and rest days (an agenda list on phones). Missed workouts move to the next training day, can be moved to a rest day or skipped, and the app suggests easing back in after time away. Standard 5/3/1 lets you choose your volume: Boring But Big (5×10), First Set Last (5×5) or main sets only.
 4. ~~**Session logging and export:**~~ log sets, accessories (built-in and custom), how it felt and notes, and export history as JSON for AI-assisted review.
+5. ~~**Rest timer:**~~ an optional timer between sets and between exercises, with adjustable times.
 
 Later: diet tracking, a progress dashboard, and warm-up sets calculated from the weights you actually use.
