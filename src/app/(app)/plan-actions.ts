@@ -9,6 +9,9 @@ import { validatePlan } from "@/lib/plan/settings";
 import { createPlan, getActivePlan, updatePlan } from "@/lib/plan/store";
 import * as workouts from "@/lib/plan/workouts";
 import type { ActionResult } from "@/lib/plan/workouts";
+import { prisma } from "@/lib/db";
+import { customExerciseSchema, workoutLogSchema, type LibraryExercise } from "@/lib/log/schema";
+import { createCustomExercise, saveWorkoutLog } from "@/lib/log/store";
 
 export type PlanResult = { ok: false; errors: Record<string, string> };
 
@@ -66,12 +69,34 @@ export async function unpinWorkoutAction(workoutId: string): Promise<ActionResul
   return done(await workouts.unpinWorkout(user.id, workoutId));
 }
 
-export async function completeWorkoutAction(workoutId: string, input: { date: string; testSets?: unknown }): Promise<ActionResult> {
+export async function completeWorkoutAction(workoutId: string, input: { date: string; log?: unknown }): Promise<ActionResult> {
   const user = await requireUser();
   const date = dateSchema.safeParse(input?.date);
-  const testSets = testSetsSchema.optional().safeParse(input?.testSets);
-  if (!idSchema.safeParse(workoutId).success || !date.success || !testSets.success) return invalid;
-  return done(await workouts.completeWorkout(user.id, workoutId, { date: date.data, testSets: testSets.data }));
+  const log = workoutLogSchema.optional().safeParse(input?.log);
+  if (!idSchema.safeParse(workoutId).success || !date.success) return invalid;
+  if (!log.success) return { ok: false, error: log.error.issues[0]?.message ?? "Something in the log wasn't valid." };
+  return done(await workouts.completeWorkout(user.id, workoutId, { date: date.data, log: log.data }));
+}
+
+export async function saveWorkoutLogAction(workoutId: string, input: unknown): Promise<ActionResult> {
+  const user = await requireUser();
+  const log = workoutLogSchema.safeParse(input);
+  if (!idSchema.safeParse(workoutId).success) return invalid;
+  if (!log.success) return { ok: false, error: log.error.issues[0]?.message ?? "Something in the log wasn't valid." };
+  return done(await saveWorkoutLog(user.id, workoutId, log.data));
+}
+
+export async function createCustomExerciseAction(
+  input: unknown,
+): Promise<{ ok: true; exercise: LibraryExercise } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const parsed = customExerciseSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the exercise details." };
+  const count = await prisma.exercise.count({ where: { ownerId: user.id } });
+  if (count >= 200) return { ok: false, error: "You've reached the limit of 200 custom exercises." };
+  const exercise = await createCustomExercise(user.id, parsed.data);
+  revalidatePath("/exercises");
+  return { ok: true, exercise };
 }
 
 export async function skipWorkoutAction(workoutId: string): Promise<ActionResult> {
