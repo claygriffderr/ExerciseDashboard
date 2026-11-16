@@ -1,23 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { WorkoutCard } from "@/components/workout-card";
 import { requireUser } from "@/lib/auth/dal";
 import { prisma } from "@/lib/db";
 import { relativeDay, workoutLabel } from "@/lib/plan/describe";
 import { getActivePlan } from "@/lib/plan/store";
 import { workoutContext } from "@/lib/plan/workouts";
 import { weightIsPerHand } from "@/lib/training/exercises";
-import { LIFT_SLOTS } from "@/lib/training/five-three-one";
+import { exerciseLibrary } from "@/lib/log/store";
+import type { Feeling } from "@/lib/log/schema";
 import { getProgram } from "@/lib/training/programs";
-import type { PlannedWorkout } from "@/lib/training/programs/types";
-import { WorkoutActions, type TestLift } from "./workout-actions";
+import { WorkoutSession, type ExerciseDraft } from "./workout-session";
 
 export const metadata: Metadata = { title: "Workout" };
-
-function fmt(n: number) {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
-}
 
 export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]">) {
   const user = await requireUser();
@@ -28,7 +23,7 @@ export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]"
       enrollment: { select: { programKey: true } },
       exercises: {
         orderBy: { order: "asc" },
-        include: { exercise: { select: { slug: true, name: true, equipment: true } }, sets: { orderBy: { setNumber: "asc" } } },
+        include: { exercise: { select: { id: true, slug: true, name: true, equipment: true, ownerId: true } }, sets: { orderBy: { setNumber: "asc" } } },
       },
     },
   });
@@ -40,39 +35,30 @@ export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]"
   const ctx = active ? await workoutContext(user.id, workout.id) : null;
   const today = plan?.today ?? new Date().toISOString().slice(0, 10);
 
-  const planned: PlannedWorkout = {
-    key: workout.templateKey ?? workout.id,
-    title: workout.title,
-    phase: workout.phase ?? "",
-    week: workout.weekNumber ?? 1,
-    day: workout.dayNumber ?? 1,
-    guidance: workout.guidance ?? undefined,
-    exercises: workout.exercises.map((e) => ({
-      exerciseSlug: e.exercise.slug,
-      section: e.section,
-      ...(e.notes ? { note: e.notes } : {}),
-      sets: e.sets.map((s) => ({
-        reps: s.targetReps ?? 0,
-        ...(s.targetRepsMax ? { repsMax: s.targetRepsMax } : {}),
-        ...(s.targetPercent ? { percent: s.targetPercent } : {}),
-        weight: s.targetWeight,
-        ...(s.isAmrap ? { amrap: true } : {}),
-        ...(s.targetRir !== null ? { repsInReserve: s.targetRir } : {}),
-      })),
+  const library = await exerciseLibrary(user.id);
+  const str = (n: number | null) => (n === null ? "" : String(n));
+  const exercises: ExerciseDraft[] = workout.exercises.map((e) => ({
+    key: e.id,
+    id: e.id,
+    exerciseId: e.exercise.id,
+    name: e.exercise.name,
+    slug: e.exercise.ownerId ? null : e.exercise.slug,
+    section: e.section,
+    note: e.notes,
+    perHand: weightIsPerHand(e.exercise.slug) || (!!e.exercise.ownerId && e.exercise.equipment === "dumbbell"),
+    rir: e.sets[0]?.targetRir ?? null,
+    sets: e.sets.map((s) => ({
+      key: s.id,
+      id: s.id,
+      target:
+        s.targetReps === null && s.targetWeight === null
+          ? null
+          : { reps: s.targetReps, repsMax: s.targetRepsMax, weight: s.targetWeight, amrap: s.isAmrap, percent: s.targetPercent },
+      weight: str(s.actualWeight),
+      reps: str(s.actualReps),
+      done: s.completed,
     })),
-  };
-
-  // Test sessions record one test set per main lift.
-  const testLifts: TestLift[] = [];
-  const recordedTests: { name: string; weight: number; reps: number }[] = [];
-  if (workout.phase === "find") {
-    for (const e of workout.exercises.filter((x) => x.section === "MAIN")) {
-      const slot = plan ? LIFT_SLOTS.find(({ slot }) => plan.settings.variants[slot] === e.exercise.slug)?.slot : undefined;
-      if (slot) testLifts.push({ slot, name: e.exercise.name, perHand: weightIsPerHand(e.exercise.slug) });
-      const set = e.sets.at(-1);
-      if (set?.actualWeight && set.actualReps) recordedTests.push({ name: e.exercise.name, weight: set.actualWeight, reps: set.actualReps });
-    }
-  }
+  }));
 
   const date = workout.status === "PLANNED" ? (ctx?.projected?.date ?? null) : workout.performedDate;
   const rel = date ? relativeDay(date, today) : null;
@@ -112,42 +98,30 @@ export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]"
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
-        <div className="space-y-4">
-          <WorkoutCard workout={planned} showTitle={false} />
-          {recordedTests.length > 0 && (
-            <section className="rounded-2xl border border-line bg-surface p-4">
-              <h2 className="font-semibold text-ink">Your test sets</h2>
-              <ul className="mt-2 space-y-1 text-sm text-muted">
-                {recordedTests.map((t) => (
-                  <li key={t.name}>
-                    {t.name}: {fmt(t.weight)} lb × {t.reps}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-        <div>
-          {ctx ? (
-            <WorkoutActions
-              workoutId={workout.id}
-              status={workout.status}
-              isNext={ctx.isNext}
-              canUndo={ctx.canUndo}
-              today={ctx.today}
-              earliestDone={ctx.earliestDone}
-              projectedDate={ctx.projected?.date ?? null}
-              earliestMove={ctx.projected?.earliestMove ?? null}
-              pinned={ctx.projected?.pinned ?? false}
-              previous={ctx.previous ? { title: ctx.previous.title, date: ctx.previous.date } : null}
-              testLifts={workout.status === "PLANNED" ? testLifts : []}
-            />
-          ) : (
-            <p className="rounded-2xl border border-line bg-surface p-5 text-sm text-muted">This workout is from an earlier plan.</p>
-          )}
-        </div>
-      </div>
+      <WorkoutSession
+        workoutId={workout.id}
+        status={workout.status}
+        phase={workout.phase}
+        guidance={workout.guidance}
+        exercises={exercises}
+        feeling={(workout.feeling as Feeling | null) ?? null}
+        notes={workout.notes ?? ""}
+        library={library}
+        plan={
+          ctx
+            ? {
+                isNext: ctx.isNext,
+                canUndo: ctx.canUndo,
+                today: ctx.today,
+                earliestDone: ctx.earliestDone,
+                projectedDate: ctx.projected?.date ?? null,
+                earliestMove: ctx.projected?.earliestMove ?? null,
+                pinned: ctx.projected?.pinned ?? false,
+                previous: ctx.previous ? { title: ctx.previous.title, date: ctx.previous.date } : null,
+              }
+            : null
+        }
+      />
     </div>
   );
 }

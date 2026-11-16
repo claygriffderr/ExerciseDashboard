@@ -2,7 +2,7 @@
 
 A web app for planning, scheduling and logging strength training built on Jim Wendler's **5/3/1** method. It's meant to work for a range of people, from experienced lifters to someone picking up a barbell for the first time.
 
-> **Status:** Steps 1 to 3 of 4 are done: secure accounts, the 5/3/1 program engine, two programs, the exercise library, the plate calculator, guided setup and the training calendar. Workout logging and export come next (see [Roadmap](#roadmap)).
+> **Status:** All four v1 steps are done: secure accounts, two 5/3/1 programs, the exercise library, the plate calculator, guided setup, the training calendar, session logging and JSON export. Diet tracking and a progress dashboard come later (see [Roadmap](#roadmap)).
 
 ## Using it
 
@@ -10,7 +10,9 @@ A web app for planning, scheduling and logging strength training built on Jim We
 2. **Follow the calendar.** Each month shows workout and rest days. Click a workout to see its sets and weights, mark it done, skip it, or move it to another day (on a computer you can also drag it).
 3. **Miss a day? Nothing is lost.** Workouts are a list done in order: a missed workout moves to your next training day. After two or more weeks away, the calendar suggests repeating a week or lowering your weights a little.
 4. **Beginners find their numbers safely.** The beginner on-ramp starts with practice weeks, then two test sessions where you record a comfortable set of 5. Training maxes are worked out from those, with no maxing out.
-5. **Plates** (bottom corner, every page) shows how to load the bar, with options close to your target weight.
+5. **Log each session.** On a workout, enter the weight and reps of each set (tick a set to log it as planned), add assistance exercises from the library or create your own, pick how it felt, and write notes.
+6. **Export your history** from the Export page as a JSON file with dates, planned and logged sets, ratings and notes. It explains itself, so you can hand it to an AI assistant (a starting prompt is on the page).
+7. **Plates** (bottom corner, every page) shows how to load the bar, with options close to your target weight.
 
 ## Run it locally (for development)
 
@@ -96,8 +98,10 @@ src/lib/plan/                A person's plan: setup answers (settings.ts, draft.
                             skip, done, undo, test results, time away)
 src/instrumentation.ts      Syncs the exercise catalog into the database at startup
 src/app/(auth)/             Log in, sign up, and their Server Actions
+src/lib/log/                 Workout logs, custom exercises and the JSON export
+src/app/api/export/         JSON download of the signed-in person's history
 src/app/(app)/              Signed-in pages (dashboard, calendar, workouts,
-                            onboarding, settings, programs, exercises) and the
+                            onboarding, settings, export, programs, exercises) and the
                             plan Server Actions (plan-actions.ts)
 src/components/             Setup wizard, plate calculator, muscle map, workout card
 tests/                      Unit tests (npm test)
@@ -128,6 +132,6 @@ tests/                      Unit tests (npm test)
 1. ~~**Foundation and secure login**~~
 2. ~~**Program engine and exercise library:**~~ 5/3/1 math, the workout queue, an always-available plate calculator, two programs (a beginner on-ramp and standard 5/3/1), and an exercise library with technique cues and muscle diagrams.
 3. ~~**Onboarding and calendar:**~~ a guided setup where every choice is explained and editable later in Settings, and a month calendar of workout and rest days (an agenda list on phones). Missed workouts move to the next training day, can be moved to a rest day or skipped, and the app suggests easing back in after time away. Standard 5/3/1 lets you choose your volume: Boring But Big (5×10), First Set Last (5×5) or main sets only.
-4. **Session logging and export:** log sets, accessories (built-in and custom), how it felt and notes, and export history as JSON for AI-assisted review.
+4. ~~**Session logging and export:**~~ log sets, accessories (built-in and custom), how it felt and notes, and export history as JSON for AI-assisted review.
 
-Later: diet tracking and a progress dashboard.
+Later: diet tracking, a progress dashboard, and warm-up sets calculated from the weights you actually use.

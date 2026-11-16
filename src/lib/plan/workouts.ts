@@ -6,6 +6,8 @@ import { trainingMaxFromTestSet } from "@/lib/training/progress";
 import { adviseAfterGap } from "@/lib/training/schedule";
 import type { TrainingMaxes } from "@/lib/training/programs/types";
 import { lastTrainedDate, projectQueue, type CalendarData, type CalendarWorkout } from "./calendar";
+import { applyLog } from "@/lib/log/store";
+import type { WorkoutLog } from "@/lib/log/schema";
 import { ensureQueue, getActivePlan, lowerMaxesAfterBreak, repeatLastWeek, saveTrainingMaxes, type ActivePlan } from "./store";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -103,11 +105,14 @@ function latestPerformedDate(ctx: NonNullable<Awaited<ReturnType<typeof context>
   return ctx.data.performed.map((p) => p.performedDate).sort().at(-1) ?? null;
 }
 
-/** Mark the next workout as done. Test sessions also record the test sets and set training maxes. */
+/**
+ * Mark the next workout as done, saving what was logged. On a test session
+ * the logged main set of each lift becomes its training max.
+ */
 export async function completeWorkout(
   userId: string,
   workoutId: string,
-  opts: { date: string; testSets?: Partial<Record<LiftSlot, TestSet>> },
+  opts: { date: string; log?: WorkoutLog },
 ): Promise<ActionResult> {
   const ctx = await context(userId);
   if (!ctx) return fail("Set up your plan first.");
@@ -116,38 +121,44 @@ export async function completeWorkout(
   if (!isDateStr(opts.date) || opts.date > ctx.plan.today) return fail("Pick today or an earlier day.");
   const latest = latestPerformedDate(ctx);
   if (latest && opts.date < latest) return fail(`Pick ${formatShort(latest)} or later, the day of your last workout.`);
-
-  const tests = opts.testSets ?? {};
-  const workout = await prisma.workout.findUniqueOrThrow({
-    where: { id: workoutId },
-    include: { exercises: { where: { section: "MAIN" }, include: { exercise: true, sets: { orderBy: { setNumber: "asc" } } } } },
-  });
   const slotOf = (slug: string) => LIFT_SLOTS.find(({ slot }) => ctx.plan.settings.variants[slot] === slug)?.slot;
 
-  await prisma.$transaction(async (tx) => {
-    if (workout.phase === "find") {
-      const recorded: Partial<Record<LiftSlot, TestSet>> = {};
-      for (const e of workout.exercises) {
-        const slot = slotOf(e.exercise.slug);
-        const set = slot ? tests[slot] : undefined;
-        const entry = e.sets.at(-1);
-        if (!slot || !set || !entry) continue;
-        recorded[slot] = set;
-        await tx.setEntry.update({
-          where: { id: entry.id },
-          data: { actualWeight: set.weight, actualReps: set.reps, completed: true },
-        });
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (opts.log) {
+        const saved = await applyLog(tx, userId, workoutId, opts.log);
+        if (!saved.ok) throw new LogError(saved.error);
       }
-      await saveTrainingMaxes(tx, userId, ctx.plan.settings, testSetMaxes(ctx.plan, recorded), "TESTED", ctx.plan.today);
-    }
-    await tx.workout.update({
-      where: { id: workoutId },
-      data: { status: "COMPLETED", performedDate: opts.date, completedAt: new Date(), pinnedDate: null },
+      const workout = await tx.workout.findUniqueOrThrow({
+        where: { id: workoutId },
+        include: { exercises: { where: { section: "MAIN" }, include: { exercise: true, sets: { orderBy: { setNumber: "asc" } } } } },
+      });
+      if (workout.phase === "find") {
+        const recorded: Partial<Record<LiftSlot, TestSet>> = {};
+        for (const e of workout.exercises) {
+          const slot = slotOf(e.exercise.slug);
+          // The heaviest logged set is the test set.
+          const best = e.sets
+            .filter((x) => x.actualWeight && x.actualReps)
+            .sort((a, b) => b.actualWeight! - a.actualWeight!)[0];
+          if (slot && best) recorded[slot] = { weight: best.actualWeight!, reps: Math.min(best.actualReps!, 15) };
+        }
+        await saveTrainingMaxes(tx, userId, ctx.plan.settings, testSetMaxes(ctx.plan, recorded), "TESTED", ctx.plan.today);
+      }
+      await tx.workout.update({
+        where: { id: workoutId },
+        data: { status: "COMPLETED", performedDate: opts.date, completedAt: new Date(), pinnedDate: null },
+      });
     });
-  });
+  } catch (e) {
+    if (e instanceof LogError) return fail(e.message);
+    throw e;
+  }
   await ensureQueue(userId);
   return OK;
 }
+
+class LogError extends Error {}
 
 /** Skip the next workout. It isn't made up; the one after it moves up. */
 export async function skipWorkout(userId: string, workoutId: string): Promise<ActionResult> {
