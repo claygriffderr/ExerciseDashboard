@@ -9,6 +9,7 @@ import { workoutContext } from "@/lib/plan/workouts";
 import { weightIsPerHand } from "@/lib/training/exercises";
 import { exerciseLibrary } from "@/lib/log/store";
 import type { Feeling } from "@/lib/log/schema";
+import { parseRestSettings } from "@/lib/log/rest";
 import { getProgram } from "@/lib/training/programs";
 import { WorkoutSession, type ExerciseDraft } from "./workout-session";
 
@@ -35,7 +36,10 @@ export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]"
   const ctx = active ? await workoutContext(user.id, workout.id) : null;
   const today = plan?.today ?? new Date().toISOString().slice(0, 10);
 
-  const library = await exerciseLibrary(user.id);
+  const [library, profile] = await Promise.all([
+    exerciseLibrary(user.id),
+    prisma.profile.findUnique({ where: { userId: user.id }, select: { restTimer: true } }),
+  ]);
   const str = (n: number | null) => (n === null ? "" : String(n));
   const exercises: ExerciseDraft[] = workout.exercises.map((e) => ({
     key: e.id,
@@ -107,6 +111,7 @@ export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]"
         feeling={(workout.feeling as Feeling | null) ?? null}
         notes={workout.notes ?? ""}
         library={library}
+        rest={parseRestSettings(profile?.restTimer)}
         plan={
           ctx
             ? {
