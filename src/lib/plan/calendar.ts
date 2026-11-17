@@ -1,3 +1,5 @@
+import { canCheckIn, checkInDayKind } from "../log/checkin";
+import type { Feeling } from "../log/schema";
 import { addDays, parseDate, projectSchedule, weekday, type DateStr } from "../training/schedule";
 
 export type QueuedWorkout = { id: string; title: string; pinnedDate: string | null; phase: string | null; weekNumber: number | null };
@@ -33,6 +35,10 @@ export type CalendarDay = {
   /** A past training day with nothing done. */
   missed: boolean;
   workouts: CalendarWorkout[];
+  /** The person's check-in for this day, if any. */
+  checkIn: { feeling: Feeling | null } | null;
+  /** A day up to today without a workout to log (rest, missed or skipped), so it can take a check-in. */
+  canCheckIn: boolean;
 };
 
 export type CalendarData = {
@@ -41,6 +47,8 @@ export type CalendarData = {
   trainingWeekdays: number[];
   today: DateStr;
   startDate: DateStr;
+  /** Days with a check-in, and the feeling given (if any). */
+  checkIns?: Record<DateStr, Feeling | null>;
 };
 
 /** Planned workouts with their projected dates, in queue order. */
@@ -118,6 +126,8 @@ export function buildMonth(month: string, data: CalendarData, projected = projec
     const workouts = byDate.get(day) ?? [];
     const isPast = day < data.today;
     const isTrainingDay = training.has(weekday(day));
+    const kind = checkInDayKind({ date: day, today: data.today, isTrainingDay, startDate: data.startDate, workouts });
+    const checkIn = data.checkIns && day in data.checkIns ? { feeling: data.checkIns[day] } : null;
     weeks[weeks.length - 1].push({
       date: day,
       inMonth: day.slice(0, 7) === month,
@@ -126,6 +136,8 @@ export function buildMonth(month: string, data: CalendarData, projected = projec
       isTrainingDay,
       missed: isPast && isTrainingDay && day >= data.startDate && workouts.length === 0,
       workouts,
+      checkIn,
+      canCheckIn: canCheckIn(kind) && day >= data.startDate,
     });
   }
   return weeks;

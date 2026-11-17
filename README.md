@@ -11,8 +11,9 @@ A web app for planning, scheduling and logging strength training built on Jim We
 3. **Miss a day? Nothing is lost.** Workouts are a list done in order: a missed workout moves to your next training day. After two or more weeks away, the calendar suggests repeating a week or lowering your weights a little.
 4. **Beginners find their numbers safely.** The beginner on-ramp starts with practice weeks, then two test sessions where you record a comfortable set of 5. Training maxes are worked out from those, with no maxing out.
 5. **Log each session.** On a workout, enter the weight and reps of each set (tick a set to log it as planned), add assistance exercises from the library or create your own, pick how it felt, and write notes. A gentle **rest timer** starts when you tick a set and turns green when the break is over. Change the times (between sets of each kind, and between exercises) or turn it off in the box at the top of the workout.
-6. **Export your history** from the Export page as a JSON file with dates, planned and logged sets, ratings and notes. It explains itself, so you can hand it to an AI assistant (a starting prompt is on the page).
-7. **Plates** (bottom corner, every page) shows how to load the bar, with options close to your target weight.
+6. **Check in on rest days.** Click a rest day on the calendar (or tap a face on the dashboard) to note how you feel, with optional quick tags (rested, sore, tired, stressed, active day) and notes. Missed and skipped training days can have a check-in too.
+7. **Export your history** from the Export page as a JSON file with dates, planned and logged sets, ratings, notes and rest-day check-ins. It explains itself, so you can hand it to an AI assistant (a starting prompt is on the page).
+8. **Plates** (bottom corner, every page) shows how to load the bar, with options close to your target weight.
 
 ## Run it locally (for development)
 
@@ -137,4 +138,12 @@ tests/                      Unit tests (npm test)
 4. ~~**Session logging and export:**~~ log sets, accessories (built-in and custom), how it felt and notes, and export history as JSON for AI-assisted review.
 5. ~~**Rest timer:**~~ an optional timer between sets and between exercises, with adjustable times.
 
-Later: diet tracking, a progress dashboard, and warm-up sets calculated from the weights you actually use.
+**v2 (in progress)**
+
+1. ~~**Rest-day check-ins:**~~ how you feel on days without a workout, with quick tags and notes, included in the export.
+2. **Accessory pairing:** alternate sets of two assistance exercises (supersets), with partner suggestions.
+3. **Progress page, part 1:** how you've felt over time, from day one.
+4. **Progress page, part 2:** training max and strength trends, unlocked after your first full 5/3/1 cycle.
+5. **Warm-up sets** calculated from the weights you actually use.
+
+Later: diet tracking, email reminders, kg units.

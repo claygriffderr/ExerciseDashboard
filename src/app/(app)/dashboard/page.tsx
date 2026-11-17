@@ -6,6 +6,9 @@ import { projectQueue } from "@/lib/plan/calendar";
 import { relativeDay, workoutLabel } from "@/lib/plan/describe";
 import { getActivePlan } from "@/lib/plan/store";
 import { loadCalendarData } from "@/lib/plan/workouts";
+import { canCheckIn, checkInDayKind } from "@/lib/log/checkin";
+import { weekday } from "@/lib/training/schedule";
+import { QuickCheckIn } from "./quick-check-in";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -30,6 +33,23 @@ export default async function DashboardPage() {
   const upcoming = data ? projectQueue(data).slice(0, 3) : [];
   const next = upcoming[0];
 
+  // A day without a workout to do gets a quick "how are you feeling?" check-in.
+  const todayKind =
+    plan && data
+      ? checkInDayKind({
+          date: plan.today,
+          today: plan.today,
+          isTrainingDay: plan.trainingWeekdays.includes(weekday(plan.today)),
+          startDate: plan.startDate,
+          workouts: [
+            ...data.performed.filter((p) => p.performedDate === plan.today),
+            ...upcoming.filter((w) => w.date === plan.today),
+          ],
+        })
+      : null;
+  const showCheckIn = !!todayKind && canCheckIn(todayKind);
+  const isTrainingToday = !!plan && plan.trainingWeekdays.includes(weekday(plan.today));
+
   return (
     <div>
       <h1 className="text-3xl font-semibold tracking-tight text-ink">Hi, {user.displayName}</h1>
@@ -48,6 +68,14 @@ export default async function DashboardPage() {
             Get started
           </Link>
         </section>
+      )}
+
+      {plan && showCheckIn && (
+        <QuickCheckIn
+          date={plan.today}
+          heading={todayKind === "skipped" ? "Workout skipped today." : isTrainingToday ? "No workout today." : "Rest day."}
+          initial={data?.checkIns?.[plan.today] ?? null}
+        />
       )}
 
       {plan && (
