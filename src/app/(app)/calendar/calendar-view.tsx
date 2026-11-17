@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState, useTransition, type DragEvent } from "react";
 import { formatShort, WEEKDAY_SHORT } from "@/lib/dates";
+import { FEELING_SHORT } from "@/lib/log/checkin";
+import { FEELING_LABELS } from "@/lib/log/schema";
 import type { CalendarDay, CalendarWorkout } from "@/lib/plan/calendar";
 import { moveWorkoutAction } from "../plan-actions";
 
@@ -65,6 +67,40 @@ function WorkoutChip({
   );
 }
 
+/** Whether a day shows its check-in or a link to add one. */
+function showsCheckIn(day: CalendarDay): boolean {
+  return day.inMonth && (day.checkIn !== null || day.canCheckIn);
+}
+
+/** "Rest" for an ordinary rest day; other days already say what they are. */
+function restWord(day: CalendarDay): string | null {
+  return day.workouts.length === 0 && !day.missed ? (day.isTrainingDay ? "No workout" : "Rest") : null;
+}
+
+function CheckInLink({ day, large }: { day: CalendarDay; large?: boolean }) {
+  const word = restWord(day);
+  const feeling = day.checkIn?.feeling ?? null;
+  const size = large ? "text-sm" : "text-[11px]";
+  return (
+    <Link
+      href={`/days/${day.date}`}
+      aria-label={day.checkIn ? `Your check-in for ${formatShort(day.date)}${feeling ? `: ${FEELING_SHORT[feeling]}` : ""}` : `Check in for ${formatShort(day.date)}`}
+      className={`block rounded-md px-1 py-0.5 leading-tight hover:bg-line/40 ${size}`}
+    >
+      {day.checkIn ? (
+        <span className="text-muted">
+          {word ?? "Checked in"} <span aria-hidden>{feeling ? FEELING_LABELS[feeling].emoji : "📝"}</span>
+        </span>
+      ) : (
+        <>
+          {word && <span className="block text-muted/80">{word}</span>}
+          <span className="font-medium text-accent">+ Check in</span>
+        </>
+      )}
+    </Link>
+  );
+}
+
 export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[][]; today: string; startDate: string }) {
   const [dragging, setDragging] = useState<CalendarWorkout | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -92,7 +128,7 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
 
   const days = weeks.flat();
   const agenda = days.filter(
-    (d) => d.inMonth && (d.workouts.length > 0 || d.isToday || (d.isTrainingDay && d.date >= startDate)),
+    (d) => d.inMonth && (d.workouts.length > 0 || d.isToday || d.date >= startDate || d.checkIn !== null),
   );
 
   return (
@@ -100,7 +136,7 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
       <p className="mb-3 hidden text-sm text-muted sm:block" aria-live="polite">
         {dragging
           ? `Drop ${dragging.title} on a highlighted day. Workouts after it follow along if needed.`
-          : "Drag a planned workout to another day to move it, or click it to open."}
+          : "Drag a planned workout to another day to move it, or click it to open. Click a rest day to note how you feel."}
       </p>
       {error && (
         <div role="alert" className="mb-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
@@ -165,8 +201,15 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
                       }}
                     />
                   ))}
-                  {day.workouts.length === 0 && !day.missed && day.inMonth && day.date >= startDate && (
-                    <span className="block px-1 text-[11px] text-muted/80">{day.isTrainingDay ? "Training day" : "Rest"}</span>
+                  {showsCheckIn(day) ? (
+                    <CheckInLink day={day} />
+                  ) : (
+                    day.workouts.length === 0 &&
+                    !day.missed &&
+                    day.inMonth &&
+                    day.date >= startDate && (
+                      <span className="block px-1 text-[11px] text-muted/80">{day.isTrainingDay ? "Training day" : "Rest"}</span>
+                    )
                   )}
                 </div>
               </div>
@@ -176,8 +219,8 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
       </div>
 
       {/* Agenda list, phones */}
-      <ol className="space-y-2 sm:hidden" aria-label="Training days this month">
-        {agenda.length === 0 && <li className="text-sm text-muted">No training days this month.</li>}
+      <ol className="space-y-2 sm:hidden" aria-label="Days this month">
+        {agenda.length === 0 && <li className="text-sm text-muted">Nothing planned this month.</li>}
         {agenda.map((day) => (
           <li
             key={day.date}
@@ -193,10 +236,12 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
               {day.workouts.map((w) => (
                 <WorkoutChip key={w.id} w={w} />
               ))}
-              {day.workouts.length === 0 && (
-                <span className={`text-sm ${day.missed ? "text-danger/80" : "text-muted"}`}>
-                  {day.missed ? "Missed" : day.isTrainingDay ? "Training day" : "Rest day"}
-                </span>
+              {day.missed && <span className="block text-sm text-danger/80">Missed</span>}
+              {showsCheckIn(day) ? (
+                <CheckInLink day={day} large />
+              ) : (
+                day.workouts.length === 0 &&
+                !day.missed && <span className="text-sm text-muted">{day.isTrainingDay ? "Training day" : "Rest day"}</span>
               )}
             </div>
           </li>
@@ -218,6 +263,9 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
         </li>
         <li className="flex items-center gap-1.5">
           <PinIcon /> Moved by you
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden>🙂</span> Your check-in
         </li>
       </ul>
     </div>

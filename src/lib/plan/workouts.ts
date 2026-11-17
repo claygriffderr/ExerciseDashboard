@@ -21,7 +21,7 @@ export type TestSet = { weight: number; reps: number };
 
 /** Everything the calendar needs: the planned queue and every finished or skipped workout. */
 export async function loadCalendarData(userId: string, plan: ActivePlan): Promise<CalendarData> {
-  const [queue, performed] = await Promise.all([
+  const [queue, performed, checkIns] = await Promise.all([
     prisma.workout.findMany({
       where: { enrollmentId: plan.enrollmentId, status: "PLANNED" },
       orderBy: { sequence: "asc" },
@@ -32,6 +32,7 @@ export async function loadCalendarData(userId: string, plan: ActivePlan): Promis
       orderBy: [{ performedDate: "asc" }, { sequence: "asc" }],
       select: { id: true, title: true, status: true, performedDate: true, phase: true, weekNumber: true },
     }),
+    prisma.dayCheckIn.findMany({ where: { userId }, select: { date: true, feeling: true } }),
   ]);
   return {
     queue,
@@ -43,6 +44,7 @@ export async function loadCalendarData(userId: string, plan: ActivePlan): Promis
     trainingWeekdays: plan.trainingWeekdays,
     today: plan.today,
     startDate: plan.startDate,
+    checkIns: Object.fromEntries(checkIns.map((c) => [c.date, c.feeling])),
   };
 }
 

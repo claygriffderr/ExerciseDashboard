@@ -30,9 +30,10 @@ const inputClass =
 
 export default async function ExportPage() {
   const user = await requireUser();
-  const [done, skipped, first] = await Promise.all([
+  const [done, skipped, checkIns, first] = await Promise.all([
     prisma.workout.count({ where: { userId: user.id, status: "COMPLETED" } }),
     prisma.workout.count({ where: { userId: user.id, status: "SKIPPED" } }),
+    prisma.dayCheckIn.count({ where: { userId: user.id } }),
     prisma.workout.findFirst({
       where: { userId: user.id, status: { in: ["COMPLETED", "SKIPPED"] }, performedDate: { not: null } },
       orderBy: { performedDate: "asc" },
@@ -45,16 +46,16 @@ export default async function ExportPage() {
       <h1 className="text-3xl font-semibold tracking-tight text-ink">Export your history</h1>
       <p className="mt-2 text-muted">
         Download every workout you&apos;ve finished or skipped as a JSON file: dates, planned and logged sets, how each session
-        felt, and your notes. It&apos;s written to make sense on its own, so you can hand it to an AI assistant to look for
+        felt, your notes, and your rest-day check-ins. It&apos;s written to make sense on its own, so you can hand it to an AI assistant to look for
         patterns, or keep it as a backup.
       </p>
 
       <section className="mt-8 rounded-2xl border border-line bg-surface p-5">
         <h2 className="text-lg font-semibold text-ink">Download</h2>
         <p className="mt-1 text-sm text-muted">
-          {done + skipped === 0
-            ? "Nothing to export yet. Finish a workout first."
-            : `${done} finished and ${skipped} skipped workouts so far${first?.performedDate ? `, since ${first.performedDate}` : ""}.`}{" "}
+          {done + skipped + checkIns === 0
+            ? "Nothing to export yet. Finish a workout or check in on a rest day first."
+            : `${done} finished and ${skipped} skipped workouts${checkIns ? `, plus ${checkIns} rest-day check-in${checkIns === 1 ? "" : "s"},` : ""} so far${first?.performedDate ? `, since ${first.performedDate}` : ""}.`}{" "}
           Leave the dates empty to export everything.
         </p>
         <form action="/api/export" method="get" className="mt-4 flex flex-wrap items-end gap-3">

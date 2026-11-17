@@ -9,6 +9,7 @@ import { EXERCISE_BY_SLUG } from "@/lib/training/exercises";
 import { LIFT_SLOTS } from "@/lib/training/five-three-one";
 import { getProgram } from "@/lib/training/programs";
 import type { ExportInput } from "./export";
+import { listCheckIns } from "./checkin-store";
 import { resolveSet, type CustomExerciseInput, type LibraryExercise, type WorkoutLog } from "./schema";
 
 type Tx = Prisma.TransactionClient;
@@ -153,7 +154,7 @@ export async function loadExportInput(userId: string, range: { from: string | nu
     ...(range.from ? { gte: range.from } : {}),
     ...(range.to ? { lte: range.to } : {}),
   };
-  const [rows, tmRows, plan] = await Promise.all([
+  const [rows, tmRows, plan, checkIns] = await Promise.all([
     prisma.workout.findMany({
       where: { userId, status: { in: ["COMPLETED", "SKIPPED"] }, performedDate: dateFilter },
       orderBy: [{ performedDate: "asc" }, { sequence: "asc" }],
@@ -177,6 +178,7 @@ export async function loadExportInput(userId: string, range: { from: string | nu
       select: { effectiveDate: true, trainingMax: true, source: true, exercise: { select: { name: true } } },
     }),
     getActivePlan(userId),
+    listCheckIns(userId, range),
   ]);
 
   const choices: Record<string, string> = {};
@@ -231,5 +233,6 @@ export async function loadExportInput(userId: string, range: { from: string | nu
         sets: e.sets,
       })),
     })),
+    checkIns,
   };
 }

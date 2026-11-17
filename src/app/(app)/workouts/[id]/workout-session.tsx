@@ -5,8 +5,6 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { formatShort } from "@/lib/dates";
 import {
   CUSTOM_EQUIPMENT,
-  FEELING_LABELS,
-  FEELINGS,
   NOTES_MAX,
   PATTERNS,
   type Feeling,
@@ -29,6 +27,7 @@ import {
   undoWorkoutAction,
   unpinWorkoutAction,
 } from "../../plan-actions";
+import { FeelingPicker } from "@/components/feeling-picker";
 import { RestCountdown, RestSettingsPanel, useRestTimer } from "./rest-timer";
 
 // ─── Types passed from the page ─────────────────────────────────────────────
@@ -280,28 +279,16 @@ export function WorkoutSession(props: SessionProps) {
           <h2 id="feeling-title" className="font-semibold text-ink">
             How did it feel?
           </h2>
-          <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-labelledby="feeling-title">
-            {FEELINGS.map((f) => {
-              const on = feeling === f;
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => {
-                    setFeeling(on ? null : f);
-                    setDirty(true);
-                    setSavedAt(null);
-                  }}
-                  className={`rounded-full border px-3.5 py-2 text-sm font-medium ${
-                    on ? "border-accent bg-accent text-accent-ink" : "border-line text-ink hover:border-accent/50"
-                  }`}
-                >
-                  <span aria-hidden>{FEELING_LABELS[f].emoji}</span> {FEELING_LABELS[f].label}
-                </button>
-              );
-            })}
+          <div className="mt-3">
+            <FeelingPicker
+              value={feeling}
+              labelledBy="feeling-title"
+              onChange={(next) => {
+                setFeeling(next);
+                setDirty(true);
+                setSavedAt(null);
+              }}
+            />
           </div>
           <label className="mt-4 block">
             <span className="font-semibold text-ink">Notes</span>

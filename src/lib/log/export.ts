@@ -1,3 +1,4 @@
+import { CHECK_IN_TAG_LABELS, type CheckIn } from "./checkin";
 import { FEELING_LABELS, type Feeling } from "./schema";
 
 /** Rows as they come from the database, trimmed to what the export needs. */
@@ -46,6 +47,8 @@ export type ExportInput = {
   } | null;
   trainingMaxHistory: { date: string; exercise: string; trainingMax: number; source: string }[];
   workouts: ExportWorkoutRow[];
+  /** Check-ins on days without a workout. Missing in older callers means none. */
+  checkIns?: CheckIn[];
 };
 
 const SECTION_NAMES = { WARMUP: "warm-up", MAIN: "main", SUPPLEMENTAL: "volume", ACCESSORY: "assistance" } as const;
@@ -57,6 +60,7 @@ const ABOUT = [
   "'asManyAsPossible' sets are done for as many good reps as possible; more reps than planned there is a sign of progress.",
   "Dumbbell weights are per hand. 'feeling' is the person's own rating of the session; 'notes' are their free-text notes.",
   "Skipped workouts are included so gaps and patterns are visible.",
+  "'restDayCheckIns' are the person's notes on days without a workout (rest days, missed or skipped training days): the same 'feeling' scale, optional quick tags and notes.",
 ].join(" ");
 
 /** Turn database rows into a self-explaining JSON document for review by a person or an AI. */
@@ -104,25 +108,37 @@ export function buildExport(input: ExportInput) {
       };
     });
 
+  const checkIns = [...(input.checkIns ?? [])]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((c) => ({
+      date: c.date,
+      feeling: c.feeling ? FEELING_LABELS[c.feeling].label : null,
+      tags: c.tags.map((t) => CHECK_IN_TAG_LABELS[t]),
+      notes: c.notes,
+    }));
+
   const completed = workouts.filter((w) => w.status === "completed").length;
+  const dates = [...workouts.map((w) => w.date), ...checkIns.map((c) => c.date)].sort();
   return {
     format: "exercise-dashboard-history",
     version: 1,
     exportedAt: input.exportedAt.toISOString(),
     units: "lb",
     about: ABOUT,
-    range: { from: input.from ?? workouts[0]?.date ?? null, to: input.to ?? workouts.at(-1)?.date ?? null },
+    range: { from: input.from ?? dates[0] ?? null, to: input.to ?? dates.at(-1) ?? null },
     summary: {
       workoutsCompleted: completed,
       workoutsSkipped: workouts.length - completed,
       withNotes: workouts.filter((w) => w.notes).length,
+      restDayCheckIns: checkIns.length,
     },
     plan: input.plan,
     trainingMaxHistory: input.trainingMaxHistory,
     workouts,
+    restDayCheckIns: checkIns,
   };
 }
 
 /** A starting prompt for asking an AI to review the export. */
 export const AI_PROMPT =
-  "Attached is my strength training history (JSON, weights in lb) from a 5/3/1 program. Please look for patterns: which lifts are progressing or stalling, how my ratings and notes relate to performance, how consistent I've been, and whether my weights look right for my training maxes. Then suggest two or three specific, safe changes for my next cycle, and tell me anything in my notes that sounds like a reason to slow down or see a professional.";
+  "Attached is my strength training history (JSON, weights in lb) from a 5/3/1 program. Please look for patterns: which lifts are progressing or stalling, how my ratings and notes (including rest-day check-ins) relate to performance, how consistent I've been, and whether my weights look right for my training maxes. Then suggest two or three specific, safe changes for my next cycle, and tell me anything in my notes that sounds like a reason to slow down or see a professional.";

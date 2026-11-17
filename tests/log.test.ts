@@ -107,7 +107,7 @@ describe("JSON export", () => {
       ["2026-11-16", "completed"],
       ["2026-11-18", "skipped"],
     ]);
-    assert.deepEqual(out.summary, { workoutsCompleted: 1, workoutsSkipped: 1, withNotes: 1 });
+    assert.deepEqual(out.summary, { workoutsCompleted: 1, workoutsSkipped: 1, withNotes: 1, restDayCheckIns: 0 });
     assert.deepEqual(out.range, { from: "2026-11-16", to: "2026-11-18" });
   });
 
