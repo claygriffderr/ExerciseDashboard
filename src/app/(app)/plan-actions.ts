@@ -63,10 +63,9 @@ export async function moveWorkoutAction(workoutId: string, date: string): Promis
   return done(await workouts.moveWorkout(user.id, workoutId, date));
 }
 
-export async function unpinWorkoutAction(workoutId: string): Promise<ActionResult> {
+export async function restoreUsualDaysAction(): Promise<ActionResult> {
   const user = await requireUser();
-  if (!idSchema.safeParse(workoutId).success) return invalid;
-  return done(await workouts.unpinWorkout(user.id, workoutId));
+  return done(await workouts.restoreUsualDays(user.id));
 }
 
 export async function completeWorkoutAction(workoutId: string, input: { date: string; log?: unknown }): Promise<ActionResult> {

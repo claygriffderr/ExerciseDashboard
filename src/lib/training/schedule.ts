@@ -1,28 +1,31 @@
 /**
  * Scheduling: the program is an ordered queue of workouts, and the calendar is
- * a set of training days. A missed workout never gets dropped and the
- * training days never move. The missed session simply becomes the next one
- * on the next training day, so every lift keeps moving through its weeks in
- * order.
+ * a set of training days. A missed workout never gets dropped: it simply
+ * becomes the next one on the next training day, so every lift keeps moving
+ * through its weeks in order. Moving a workout changes which days are
+ * training days, never the order of the workouts.
  *
  * Dates are "YYYY-MM-DD" strings for calendar days (no times, no time zones).
  */
 
 export type DateStr = string;
 
-export type QueueItem = {
-  id: string;
-  /** A day the person chose for this workout (for example, a make-up on a rest day). */
-  pinnedDate?: DateStr | null;
-};
+/**
+ * Days the person changed by moving workouts. "OFF" takes a usual training
+ * day out of the schedule; "EXTRA" adds a day that isn't one.
+ */
+export type DayChangeKind = "EXTRA" | "OFF";
+export type DayChanges = ReadonlyMap<DateStr, DayChangeKind>;
 
 export type ScheduleOptions = {
   /** Weekdays the person trains on, 0 = Sunday ... 6 = Saturday. */
   trainingWeekdays: number[];
-  /** The person's current local date. */
+  /** The first day workouts can go on (the person's current local date, or a later start date). */
   today: DateStr;
   /** Days that already have a finished or skipped workout. Nothing else goes there. */
   busyDates?: DateStr[];
+  /** Days moved in or out of the schedule. */
+  dayChanges?: DayChanges;
   /** Safety limit on how far ahead to look. */
   horizonDays?: number;
 };
@@ -50,42 +53,57 @@ export function daysBetween(from: DateStr, to: DateStr): number {
   return Math.round((parseDate(to).getTime() - parseDate(from).getTime()) / 86_400_000);
 }
 
+/** Whether a day is in the schedule, counting days the person moved. */
+export function isTrainingDate(d: DateStr, trainingWeekdays: Iterable<number>, changes?: DayChanges): boolean {
+  const change = changes?.get(d);
+  if (change === "EXTRA") return true;
+  if (change === "OFF") return false;
+  return new Set(trainingWeekdays).has(weekday(d));
+}
+
 /**
- * Projected date for every planned workout, in queue order. Rules:
- * - A pinned workout keeps its date if that date is today or later and comes
- *   after the workout before it in the queue. Otherwise the pin is ignored
- *   (it was missed, or it would put sessions out of order).
- * - Every other workout takes the next free training day after the one before it.
- * - One workout per day.
+ * Projected date for every planned workout, in queue order. The order of
+ * workouts never changes: they fill the training days (usual weekdays, minus
+ * days moved off, plus days moved to) one per day, skipping days that
+ * already have a finished or skipped workout.
  */
-export function projectSchedule(items: QueueItem[], opts: ScheduleOptions): Map<string, DateStr> {
+export function projectSchedule(ids: string[], opts: ScheduleOptions): Map<string, DateStr> {
   const weekdays = new Set(opts.trainingWeekdays.filter((d) => d >= 0 && d <= 6));
+  const changes = opts.dayChanges ?? new Map<DateStr, DayChangeKind>();
   const horizon = opts.horizonDays ?? 3650;
-  const occupied = new Set(opts.busyDates ?? []);
-  for (const item of items) {
-    if (item.pinnedDate && item.pinnedDate >= opts.today) occupied.add(item.pinnedDate);
-  }
+  const busy = new Set(opts.busyDates ?? []);
+  const lastExtra = [...changes].filter(([, k]) => k === "EXTRA").map(([d]) => d).sort().at(-1);
 
   const result = new Map<string, DateStr>();
-  let cursor = opts.today;
-  for (const item of items) {
-    const pin = item.pinnedDate;
-    if (pin && pin >= cursor) {
-      result.set(item.id, pin);
-      cursor = addDays(pin, 1);
-      continue;
-    }
-    if (pin) occupied.delete(pin);
-    if (weekdays.size === 0) break;
-    let day = cursor;
+  let day = opts.today;
+  for (const id of ids) {
     let guard = 0;
-    while ((!weekdays.has(weekday(day)) || occupied.has(day)) && guard++ < horizon) day = addDays(day, 1);
-    if (guard >= horizon) break;
-    result.set(item.id, day);
-    occupied.add(day);
-    cursor = addDays(day, 1);
+    while (!(isTrainingDate(day, weekdays, changes) && !busy.has(day))) {
+      // With no usual training days, only added days can be used.
+      if (++guard > horizon || (weekdays.size === 0 && (!lastExtra || day > lastExtra))) return result;
+      day = addDays(day, 1);
+    }
+    result.set(id, day);
+    day = addDays(day, 1);
   }
   return result;
+}
+
+/**
+ * The day changes after moving the workout on `from` to `to`. The order of
+ * workouts stays the same: `from` leaves the schedule and `to` joins it, and
+ * the queue fills the resulting days in order. Moving onto a day that's
+ * already a training day only takes `from` out.
+ */
+export function moveDay(changes: DayChanges, from: DateStr, to: DateStr, trainingWeekdays: number[]): Map<DateStr, DayChangeKind> {
+  const next = new Map(changes);
+  if (from === to) return next;
+  const usual = (d: DateStr) => trainingWeekdays.includes(weekday(d));
+  if (next.get(from) === "EXTRA") next.delete(from);
+  else if (usual(from)) next.set(from, "OFF");
+  if (next.get(to) === "OFF") next.delete(to);
+  else if (!usual(to)) next.set(to, "EXTRA");
+  return next;
 }
 
 /** The next `count` training days on or after `from`. */

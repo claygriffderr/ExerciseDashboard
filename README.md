@@ -115,7 +115,7 @@ tests/                      Unit tests (npm test)
 - Calendar days are stored as `YYYY-MM-DD` strings. A day with no workout is a rest day. "Today" comes from the time zone the browser reported during setup (`Profile.timezone`).
 - Program definitions (5/3/1 templates) live in code. The database stores each person's choices and history.
 - The built-in exercises live in `src/lib/training/exercises.ts` and are copied into the database each time the server starts. Custom exercises belong to one user.
-- A program is an ordered queue of workouts (`Workout.sequence`). Calendar dates are worked out from the queue and the person's training days, so a missed workout moves to the next training day instead of being dropped. `pinnedDate` holds a day the person chose; `performedDate` is when it was actually done or skipped.
+- A program is an ordered queue of workouts (`Workout.sequence`). Calendar dates are worked out from the queue and the person's training days, so a missed workout moves to the next training day instead of being dropped. Moving a workout changes the *days*, never the order: the day it leaves becomes a day off and the day it goes to becomes a training day (`ScheduleDay` rows, `OFF` or `EXTRA`), and the queue fills the training days in order. `performedDate` is when a workout was actually done or skipped.
 - Small lists (plates, weekdays, muscles, cues) are JSON strings so the schema moves to Postgres without changes beyond the provider.
 
 ## Scripts

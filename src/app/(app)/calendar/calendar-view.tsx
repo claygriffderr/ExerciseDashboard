@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition, type DragEvent } from "react";
 import { formatShort, WEEKDAY_SHORT } from "@/lib/dates";
 import type { CalendarDay, CalendarWorkout } from "@/lib/plan/calendar";
-import { moveWorkoutAction } from "../plan-actions";
+import { moveWorkoutAction, restoreUsualDaysAction } from "../plan-actions";
 
 function PinIcon() {
   return (
@@ -53,19 +53,36 @@ function WorkoutChip({
           : undefined
       }
       onDragEnd={onDragEnd}
-      aria-label={`${w.title}, ${statusWord(w)}${w.pinned ? ", moved by you" : ""}`}
+      aria-label={`${w.title}, ${statusWord(w)}${w.moved ? ", moved by you" : ""}`}
       className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium leading-tight hover:ring-2 hover:ring-accent/40 ${chipClass(
         w,
       )} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
       {w.status === "COMPLETED" && <span aria-hidden>✓</span>}
       <span className={compact ? "line-clamp-2" : ""}>{w.title}</span>
-      {w.pinned && <PinIcon />}
+      {w.moved && <PinIcon />}
     </Link>
   );
 }
 
-export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[][]; today: string; startDate: string }) {
+function emptyDayLabel(day: CalendarDay): string {
+  if (day.missed) return "Missed";
+  if (day.dayOff) return "Day off · moved";
+  return day.isTrainingDay ? "Training day" : "Rest day";
+}
+
+export function CalendarView({
+  weeks,
+  today,
+  startDate,
+  canRestore,
+}: {
+  weeks: CalendarDay[][];
+  today: string;
+  startDate: string;
+  /** Some upcoming days were moved. */
+  canRestore: boolean;
+}) {
   const [dragging, setDragging] = useState<CalendarWorkout | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,16 +107,24 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
     });
   };
 
+  const restore = () => {
+    setError(null);
+    startTransition(async () => {
+      const result = await restoreUsualDaysAction();
+      if (!result.ok) setError(result.error);
+    });
+  };
+
   const days = weeks.flat();
   const agenda = days.filter(
-    (d) => d.inMonth && (d.workouts.length > 0 || d.isToday || (d.isTrainingDay && d.date >= startDate)),
+    (d) => d.inMonth && (d.workouts.length > 0 || d.isToday || d.dayOff || (d.isTrainingDay && d.date >= startDate)),
   );
 
   return (
     <div>
       <p className="mb-3 hidden text-sm text-muted sm:block" aria-live="polite">
         {dragging
-          ? `Drop ${dragging.title} on a highlighted day. Workouts after it follow along if needed.`
+          ? `Drop ${dragging.title} on a highlighted day. Its old day becomes a day off, and workouts keep their order.`
           : "Drag a planned workout to another day to move it, or click it to open."}
       </p>
       {error && (
@@ -166,7 +191,10 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
                     />
                   ))}
                   {day.workouts.length === 0 && !day.missed && day.inMonth && day.date >= startDate && (
-                    <span className="block px-1 text-[11px] text-muted/80">{day.isTrainingDay ? "Training day" : "Rest"}</span>
+                    <span className="flex items-center gap-1 px-1 text-[11px] text-muted/80">
+                      {day.dayOff ? "Day off · moved" : day.isTrainingDay ? "Training day" : "Rest"}
+                      {day.dayOff && <PinIcon />}
+                    </span>
                   )}
                 </div>
               </div>
@@ -194,8 +222,9 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
                 <WorkoutChip key={w.id} w={w} />
               ))}
               {day.workouts.length === 0 && (
-                <span className={`text-sm ${day.missed ? "text-danger/80" : "text-muted"}`}>
-                  {day.missed ? "Missed" : day.isTrainingDay ? "Training day" : "Rest day"}
+                <span className={`flex items-center gap-1.5 text-sm ${day.missed ? "text-danger/80" : "text-muted"}`}>
+                  {emptyDayLabel(day)}
+                  {day.dayOff && !day.missed && <PinIcon />}
                 </span>
               )}
             </div>
@@ -220,6 +249,19 @@ export function CalendarView({ weeks, today, startDate }: { weeks: CalendarDay[]
           <PinIcon /> Moved by you
         </li>
       </ul>
+      {canRestore && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-muted">You moved some upcoming days.</span>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={restore}
+            className="rounded-lg border border-line px-3 py-1.5 font-medium text-ink hover:bg-line/40 disabled:opacity-60"
+          >
+            Restore my usual days
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -97,7 +97,7 @@ export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]"
             >
               {when}
             </span>
-            {ctx?.projected?.pinned && <span className="text-muted">You moved it to this day.</span>}
+            {ctx?.projected?.moved && <span className="text-muted">You moved a workout to this day.</span>}
           </p>
         </div>
       </div>
@@ -121,7 +121,6 @@ export default async function WorkoutPage({ params }: PageProps<"/workouts/[id]"
                 earliestDone: ctx.earliestDone,
                 projectedDate: ctx.projected?.date ?? null,
                 earliestMove: ctx.projected?.earliestMove ?? null,
-                pinned: ctx.projected?.pinned ?? false,
                 previous: ctx.previous ? { title: ctx.previous.title, date: ctx.previous.date } : null,
               }
             : null

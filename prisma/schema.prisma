@@ -138,8 +138,29 @@ model ProgramEnrollment {
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   cycles     Cycle[]
   workouts   Workout[]
+  dayChanges ScheduleDay[]
 
   @@index([userId, status])
+}
+
+// A day the person changed in their training schedule by moving a workout.
+// The workout order never changes: moving takes the day it left out of the
+// training days (OFF) and adds the day it went to (EXTRA, unless that's
+// already a training day). The queue fills the training days in order.
+model ScheduleDay {
+  id           String            @id @default(cuid())
+  enrollmentId String
+  date         String
+  kind         ScheduleDayKind
+  createdAt    DateTime          @default(now())
+  enrollment   ProgramEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, date])
+}
+
+enum ScheduleDayKind {
+  EXTRA
+  OFF
 }
 
 // One pass through the program's weeks (4 weeks for standard 5/3/1).
@@ -197,9 +218,8 @@ enum Feeling {
 // Program workouts form an ordered queue per enrollment (sequence). Their
 // calendar dates are projected from the queue and the person's training days,
 // so a missed workout slides to the next training day instead of being
-// dropped. pinnedDate holds a day the person chose (e.g. a make-up on a rest
-// day); performedDate is the day it was actually done or skipped. Workouts
-// outside any program have no enrollment and use pinnedDate.
+// dropped. Days the person moved workouts to or from are ScheduleDay rows;
+// performedDate is the day a workout was actually done or skipped.
 model Workout {
   id            String             @id @default(cuid())
   userId        String
@@ -212,7 +232,6 @@ model Workout {
   weekNumber    Int?
   dayNumber     Int?
   guidance      String?
-  pinnedDate    String?
   performedDate String?
   status        WorkoutStatus      @default(PLANNED)
   feeling       Feeling?
@@ -228,7 +247,6 @@ model Workout {
   @@unique([enrollmentId, sequence])
   @@index([userId, status])
   @@index([userId, performedDate])
-  @@index([userId, pinnedDate])
 }
 
 enum WorkoutSection {
