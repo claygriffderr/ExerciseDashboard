@@ -57,8 +57,6 @@ async function insertWorkouts(
     cycleId: string | null;
     startSequence: number;
     workouts: PlannedWorkout[];
-    /** Days the person picked for workouts, by template key, to keep through a rebuild. */
-    pins?: Map<string, string>;
   },
 ): Promise<number> {
   const ids = await exerciseIds(tx);
@@ -76,7 +74,6 @@ async function insertWorkouts(
         weekNumber: w.week,
         dayNumber: w.day,
         guidance: w.guidance ?? null,
-        pinnedDate: opts.pins?.get(w.key) ?? null,
         exercises: {
           create: w.exercises.map((e, order) => {
             const exerciseId = ids.get(e.exerciseSlug);
@@ -320,8 +317,8 @@ export const REPEAT_SUFFIX = ":repeat";
 /**
  * Rebuild the planned (not yet done) workouts after the plan, training maxes
  * or equipment change, starting from where the person is now. Repeated
- * workouts (after time away) stay at the front as they are, and days the
- * person picked for a workout are kept.
+ * workouts (after time away) stay at the front as they are. Days the person
+ * moved workouts to or from belong to the schedule, so they stay too.
  */
 export async function rebuildPlannedQueue(userId: string): Promise<void> {
   const plan = await getActivePlan(userId);
@@ -335,7 +332,6 @@ export async function rebuildPlannedQueue(userId: string): Promise<void> {
     const isRepeat = (key: string | null) => !!key?.endsWith(REPEAT_SUFFIX);
     const head = planned.find((w) => !isRepeat(w.templateKey));
     if (!head) return;
-    const pins = new Map(planned.filter((w) => w.pinnedDate && w.templateKey).map((w) => [w.templateKey!, w.pinnedDate!]));
     const doneKeys = new Set(
       (
         await tx.workout.findMany({
@@ -368,7 +364,6 @@ export async function rebuildPlannedQueue(userId: string): Promise<void> {
       cycleId: head.cycleId,
       startSequence: await nextSequence(tx, plan.enrollmentId),
       workouts: rest,
-      pins,
     });
   });
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/dal";
 import { formatMonth } from "@/lib/dates";
-import { buildMonth, lastTrainedDate, monthOf, projectQueue, shiftMonth } from "@/lib/plan/calendar";
+import { buildMonth, hasUpcomingDayChanges, lastTrainedDate, monthOf, projectQueue, shiftMonth } from "@/lib/plan/calendar";
 import { relativeDay, workoutLabel } from "@/lib/plan/describe";
 import { getActivePlan } from "@/lib/plan/store";
 import { loadCalendarData } from "@/lib/plan/workouts";
@@ -117,7 +117,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         </section>
       )}
 
-      <CalendarView weeks={weeks} today={plan.today} startDate={plan.startDate} />
+      <CalendarView weeks={weeks} today={plan.today} startDate={plan.startDate} canRestore={hasUpcomingDayChanges(data)} />
     </div>
   );
 }

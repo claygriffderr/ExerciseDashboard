@@ -376,7 +376,7 @@ function Review({
     const list = runIntro ? program.buildIntro({ settings: s, gear }) : program.buildCycle({ settings: s, trainingMaxes, gear, cycle: 1 });
     const shown = list.slice(0, 6);
     const dates = projectSchedule(
-      shown.map((w) => ({ id: w.key })),
+      shown.map((w) => w.key),
       { trainingWeekdays: draft.trainingWeekdays, today: startDate > today ? startDate : today },
     );
     preview = shown.map((w) => ({ date: dates.get(w.key), title: w.title }));

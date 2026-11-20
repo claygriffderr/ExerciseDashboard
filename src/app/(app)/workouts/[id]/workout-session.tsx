@@ -27,7 +27,6 @@ import {
   saveWorkoutLogAction,
   skipWorkoutAction,
   undoWorkoutAction,
-  unpinWorkoutAction,
 } from "../../plan-actions";
 import { RestCountdown, RestSettingsPanel, useRestTimer } from "./rest-timer";
 
@@ -67,7 +66,6 @@ export type SessionProps = {
     earliestDone: string | null;
     projectedDate: string | null;
     earliestMove: string | null;
-    pinned: boolean;
     previous: { title: string; date: string } | null;
   } | null;
 };
@@ -758,7 +756,7 @@ function FinishCard({
         {confirmSkip ? (
           <div>
             <p className="text-sm leading-6 text-ink">
-              Skip it? It won&apos;t be made up: the next workout takes its place on your next training day.
+              Skip it? It won&apos;t be made up: your next training day gets the workout after this one, and so on.
             </p>
             <div className="mt-3 flex gap-2">
               <button type="button" disabled={pending} onClick={() => run(() => skipWorkoutAction(workoutId))} className={secondary}>
@@ -789,8 +787,8 @@ function MoveCard({ workoutId, plan }: { workoutId: string; plan: NonNullable<Se
         Move to another day
       </h2>
       <p className="mt-1 text-sm leading-6 text-muted">
-        Pick any free day, including a rest day to catch up. Workouts stay in order, so later workouts follow along if
-        needed. You can also drag workouts on the calendar.
+        Pick any free day, including a rest day. The day it&apos;s on now becomes a day off, and workouts always keep their
+        order: each training day gets the next workout in line. You can also drag workouts on the calendar.
       </p>
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="block text-sm">
@@ -805,11 +803,6 @@ function MoveCard({ workoutId, plan }: { workoutId: string; plan: NonNullable<Se
         >
           {pending ? "Moving…" : "Move"}
         </button>
-        {plan.pinned && (
-          <button type="button" disabled={pending} onClick={() => run(() => unpinWorkoutAction(workoutId))} className={secondary}>
-            Back to its usual day
-          </button>
-        )}
       </div>
       <ErrorText message={error} />
     </section>

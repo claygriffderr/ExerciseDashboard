@@ -1,7 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { formatLong, isDateStr, todayIn } from "../src/lib/dates";
-import { buildMonth, lastTrainedDate, monthOf, projectQueue, shiftMonth, type CalendarData } from "../src/lib/plan/calendar";
+import {
+  buildMonth,
+  hasUpcomingDayChanges,
+  lastTrainedDate,
+  monthOf,
+  projectQueue,
+  shiftMonth,
+  type CalendarData,
+  type PerformedWorkout,
+} from "../src/lib/plan/calendar";
+import { moveDay } from "../src/lib/training/schedule";
 import { relativeDay, workoutLabel } from "../src/lib/plan/describe";
 import { draftFromPlan, draftToInput, newDraft, programDefaults } from "../src/lib/plan/draft";
 import { parseStoredSettings, resolveSettings, trainingMaxFromEntry, validatePlan } from "../src/lib/plan/settings";
@@ -109,9 +119,9 @@ describe("plan settings", () => {
 describe("calendar", () => {
   const base: CalendarData = {
     queue: [
-      { id: "a", title: "A", pinnedDate: null, phase: "main", weekNumber: 1 },
-      { id: "b", title: "B", pinnedDate: null, phase: "main", weekNumber: 1 },
-      { id: "c", title: "C", pinnedDate: null, phase: "main", weekNumber: 1 },
+      { id: "a", title: "A", phase: "main", weekNumber: 1 },
+      { id: "b", title: "B", phase: "main", weekNumber: 1 },
+      { id: "c", title: "C", phase: "main", weekNumber: 1 },
     ],
     performed: [
       { id: "x", title: "X", status: "COMPLETED", performedDate: "2026-11-11", phase: "main", weekNumber: 1 },
@@ -120,6 +130,7 @@ describe("calendar", () => {
     trainingWeekdays: [1, 3, 5],
     today: TODAY,
     startDate: "2026-11-09",
+    dayChanges: [],
   };
 
   it("projects the queue onto training days from today", () => {
@@ -132,21 +143,22 @@ describe("calendar", () => {
         ["c", "2026-11-20", false],
       ],
     );
-    assert.equal(projected[0].earliestMove, TODAY);
-    assert.equal(projected[1].earliestMove, "2026-11-17", "can move to the rest day right after A");
+    assert.ok(projected.every((w) => w.earliestMove === TODAY));
   });
 
-  it("puts a moved workout on its new day and lets later ones follow", () => {
-    const moved = { ...base, queue: base.queue.map((q) => (q.id === "a" ? { ...q, pinnedDate: "2026-11-17" } : q)) };
+  it("puts workouts on moved-to days and marks them", () => {
+    const moved = { ...base, dayChanges: [{ date: TODAY, kind: "OFF" as const }, { date: "2026-11-17", kind: "EXTRA" as const }] };
     const projected = projectQueue(moved);
     assert.deepEqual(
-      projected.map((w) => [w.id, w.date, w.pinned]),
+      projected.map((w) => [w.id, w.date, w.moved]),
       [
         ["a", "2026-11-17", true],
         ["b", "2026-11-18", false],
         ["c", "2026-11-20", false],
       ],
     );
+    assert.equal(hasUpcomingDayChanges(moved), true);
+    assert.equal(hasUpcomingDayChanges({ ...base, dayChanges: [{ date: "2026-11-02", kind: "OFF" }] }), false);
   });
 
   it("waits for the start date", () => {
@@ -169,6 +181,23 @@ describe("calendar", () => {
     assert.equal(day("2026-11-16").workouts[0].id, "a");
     assert.equal(day("2026-11-17").workouts.length, 0);
     assert.equal(day("2026-11-17").isTrainingDay, false);
+    assert.equal(day("2026-11-17").dayOff, false);
+  });
+
+  it("shows days moved off as days off, never missed", () => {
+    const weeks = buildMonth("2026-11", {
+      ...base,
+      dayChanges: [
+        { date: "2026-11-09", kind: "OFF" },
+        { date: "2026-11-10", kind: "EXTRA" },
+        { date: "2026-11-18", kind: "OFF" },
+      ],
+    });
+    const day = (d: string) => weeks.flat().find((x) => x.date === d)!;
+    assert.deepEqual([day("2026-11-09").dayOff, day("2026-11-09").missed, day("2026-11-09").isTrainingDay], [true, false, false]);
+    assert.equal(day("2026-11-10").missed, true, "a past added day with nothing done");
+    assert.equal(day("2026-11-18").dayOff, true);
+    assert.equal(day("2026-11-18").workouts.length, 0);
   });
 
   it("covers months that start on a Sunday or end on a Saturday", () => {
@@ -213,5 +242,131 @@ describe("dates and labels", () => {
     assert.equal(relativeDay(TODAY, TODAY), "Today");
     assert.equal(relativeDay("2026-11-17", TODAY), "Tomorrow");
     assert.equal(relativeDay("2026-11-20", TODAY), "Friday, November 20");
+  });
+});
+
+/**
+ * Clay's week: training on Tue, Thu and Sat, alternating Practice B and A.
+ * 2026-11-17 is a Tuesday. The order of workouts never changes; moving one
+ * only changes which days are training days.
+ */
+describe("moving and skipping workouts", () => {
+  const TUE = "2026-11-17";
+  const WED = "2026-11-18";
+  const THU = "2026-11-19";
+  const FRI = "2026-11-20";
+  const SAT = "2026-11-21";
+  const MON2 = "2026-11-23";
+  const TUE2 = "2026-11-24";
+  const THU2 = "2026-11-26";
+  const done = (id: string, date: string, status: "COMPLETED" | "SKIPPED" = "COMPLETED"): PerformedWorkout => ({
+    id,
+    title: id,
+    status,
+    performedDate: date,
+    phase: "intro",
+    weekNumber: 1,
+  });
+  const week = (today: string, performed: PerformedWorkout[] = [], queue = ["B1", "A2", "B2", "A3"]): CalendarData => ({
+    queue: queue.map((id) => ({ id, title: id, phase: "intro", weekNumber: 1 })),
+    performed: [done("A1", TUE), ...performed],
+    trainingWeekdays: [2, 4, 6],
+    today,
+    startDate: "2026-11-10",
+    dayChanges: [],
+  });
+  /** Move the workout `id` to `to`, the way the app does. */
+  const move = (data: CalendarData, id: string, to: string): CalendarData => {
+    const from = projectQueue(data).find((w) => w.id === id)!.date;
+    const changes = moveDay(new Map(data.dayChanges.map((c) => [c.date, c.kind])), from, to, data.trainingWeekdays);
+    return { ...data, dayChanges: [...changes].map(([date, kind]) => ({ date, kind })) };
+  };
+  const plan = (data: CalendarData) => projectQueue(data).map((w) => `${w.id} ${w.date}`);
+  const dayOf = (data: CalendarData, date: string) =>
+    buildMonth(date.slice(0, 7), data)
+      .flat()
+      .find((d) => d.date === date)!;
+
+  it("starts on the usual days", () => {
+    assert.deepEqual(plan(week(WED)), [`B1 ${THU}`, `A2 ${SAT}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+  });
+
+  it("moving a workout earlier clears its old day and keeps everything else where it was", () => {
+    const moved = move(week(WED), "B1", WED);
+    assert.deepEqual(plan(moved), [`B1 ${WED}`, `A2 ${SAT}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    const thursday = dayOf(moved, THU);
+    assert.deepEqual([thursday.workouts.length, thursday.dayOff, thursday.isTrainingDay], [0, true, false]);
+    assert.equal(projectQueue(moved)[0].moved, true, "shown as moved by you");
+
+    // Clay does B1 on Wednesday. On Thursday nothing is planned, and Thursday
+    // doesn't count as missed afterwards.
+    const thursdayAfter = { ...moved, today: THU, performed: [...moved.performed, done("B1", WED)], queue: moved.queue.slice(1) };
+    assert.deepEqual(plan(thursdayAfter), [`A2 ${SAT}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    assert.equal(dayOf({ ...thursdayAfter, today: FRI }, THU).missed, false);
+  });
+
+  it("moving a workout onto the next workout's day frees its old day and pushes the rest back one slot", () => {
+    const today = week(THU, [done("B1", WED)], ["A2", "B2", "A3", "B3"]);
+    const moved = move(today, "A2", SAT);
+    assert.deepEqual(plan(moved), [`A2 ${SAT}`, `B2 ${TUE2}`, `A3 ${THU2}`, "B3 2026-11-28"]);
+    assert.equal(dayOf(moved, THU).dayOff, true, "today reads as a day off, not a training day");
+    assert.equal(dayOf(moved, THU).isTrainingDay, false);
+  });
+
+  it("moving a workout past another one keeps the order: the earlier day gets the moved workout", () => {
+    const moved = move(week(WED), "B1", MON2);
+    assert.deepEqual(plan(moved), [`B1 ${SAT}`, `A2 ${MON2}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    assert.equal(dayOf(moved, THU).dayOff, true);
+  });
+
+  it("moving a later slot before an earlier one: Wednesday gets Thursday's workout and so on", () => {
+    const moved = move(week(WED), "A2", WED);
+    assert.deepEqual(plan(moved), [`B1 ${WED}`, `A2 ${THU}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    assert.equal(dayOf(moved, SAT).dayOff, true);
+  });
+
+  it("moving a workout past several others", () => {
+    const moved = move(week(WED), "B1", "2026-11-25");
+    assert.deepEqual(plan(moved), [`B1 ${SAT}`, `A2 ${TUE2}`, `B2 2026-11-25`, `A3 ${THU2}`]);
+  });
+
+  it("dragging a workout back to a day off makes it a training day again", () => {
+    const today = week(THU, [done("B1", WED)], ["A2", "B2", "A3"]);
+    const there = move(today, "A2", SAT);
+    const back = move(there, "A2", THU);
+    assert.deepEqual(plan(back), [`A2 ${THU}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    assert.equal(dayOf(back, THU).dayOff, false);
+    assert.equal(dayOf(back, SAT).dayOff, true, "Saturday is now the day moved off");
+    // Restoring the usual days puts everything back.
+    assert.deepEqual(plan({ ...back, dayChanges: [] }), [`A2 ${THU}`, `B2 ${SAT}`, `A3 ${TUE2}`]);
+  });
+
+  it("moving a workout off a day it was moved to doesn't leave that day behind", () => {
+    const once = move(week(WED), "B1", WED);
+    const twice = move(once, "B1", FRI);
+    assert.deepEqual(plan(twice), [`B1 ${FRI}`, `A2 ${SAT}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    assert.equal(dayOf(twice, WED).isTrainingDay, false);
+    assert.equal(dayOf(twice, THU).dayOff, true);
+  });
+
+  it("skipping a workout gives the next training day the next workout, and so on", () => {
+    const skipped = week(THU, [done("B1", THU, "SKIPPED")], ["A2", "B2", "A3"]);
+    assert.deepEqual(plan(skipped), [`A2 ${SAT}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    // Skipped ahead of time, on a rest day: the next workout takes its day.
+    const early = week(WED, [done("B1", WED, "SKIPPED")], ["A2", "B2", "A3"]);
+    assert.deepEqual(plan(early), [`A2 ${THU}`, `B2 ${SAT}`, `A3 ${TUE2}`]);
+  });
+
+  it("a missed workout moves to the next training day and the rest follow", () => {
+    assert.deepEqual(plan(week(FRI)), [`B1 ${SAT}`, `A2 ${TUE2}`, `B2 ${THU2}`, "A3 2026-11-28"]);
+  });
+
+  it("doing the next workout today, ahead of its day, works like moving it to today", () => {
+    // What completing does: move its planned day (Thursday) to today (Wednesday).
+    const moved = move(week(WED), "B1", WED);
+    const after = { ...moved, performed: [...moved.performed, done("B1", WED)], queue: moved.queue.slice(1) };
+    assert.deepEqual(plan(after), [`A2 ${SAT}`, `B2 ${TUE2}`, `A3 ${THU2}`]);
+    // Undoing it puts it back on today.
+    assert.deepEqual(plan(moved)[0], `B1 ${WED}`);
   });
 });

@@ -12,7 +12,7 @@ import {
 import { EXERCISES, getExercise, slotVariants } from "../src/lib/training/exercises";
 import { PROGRAMS, getProgram } from "../src/lib/training/programs";
 import { lowerTrainingMaxes, progressTrainingMaxes, trainingMaxFromTestSet } from "../src/lib/training/progress";
-import { adviseAfterGap, nextTrainingDays, projectSchedule, weekday } from "../src/lib/training/schedule";
+import { adviseAfterGap, moveDay, nextTrainingDays, projectSchedule, weekday } from "../src/lib/training/schedule";
 
 describe("plates", () => {
   it("finds the fewest plates per side", () => {
@@ -238,7 +238,7 @@ describe("workout queue scheduling", () => {
   // 2026-11-16 is a Monday.
   const MON = "2026-11-16";
   const weekdays = [1, 3, 5];
-  const q = (...ids: string[]) => ids.map((id) => ({ id }));
+  const q = (...ids: string[]) => ids;
 
   it("fills the training days in order", () => {
     assert.equal(weekday(MON), 1);
@@ -258,22 +258,49 @@ describe("workout queue scheduling", () => {
     assert.equal(s.get("a"), "2026-11-18");
   });
 
-  it("honors a make-up workout pinned to a rest day", () => {
-    const s = projectSchedule([{ id: "a", pinnedDate: "2026-11-17" }, { id: "b" }, { id: "c" }], {
-      trainingWeekdays: weekdays,
-      today: MON,
-    });
-    assert.deepEqual([s.get("a"), s.get("b"), s.get("c")], ["2026-11-17", "2026-11-18", "2026-11-20"]);
+  it("uses days moved to and leaves out days moved off, keeping the order", () => {
+    // Tue 17 is a rest day moved in; Wed 18 is a training day moved off.
+    const changes = new Map([
+      ["2026-11-17", "EXTRA" as const],
+      ["2026-11-18", "OFF" as const],
+    ]);
+    const s = projectSchedule(q("a", "b", "c"), { trainingWeekdays: weekdays, today: MON, dayChanges: changes });
+    assert.deepEqual([...s.values()], [MON, "2026-11-17", "2026-11-20"]);
   });
 
-  it("ignores pins in the past or out of order", () => {
-    const past = projectSchedule([{ id: "a", pinnedDate: "2026-11-10" }], { trainingWeekdays: weekdays, today: MON });
-    assert.equal(past.get("a"), MON);
-    const outOfOrder = projectSchedule([{ id: "a" }, { id: "b", pinnedDate: MON }], {
+  it("never puts a workout on a day that already has a finished one, even a moved-to day", () => {
+    const changes = new Map([["2026-11-17", "EXTRA" as const]]);
+    const s = projectSchedule(q("a", "b"), {
       trainingWeekdays: weekdays,
       today: MON,
+      busyDates: [MON, "2026-11-17"],
+      dayChanges: changes,
     });
-    assert.ok(outOfOrder.get("a")! < outOfOrder.get("b")!);
+    assert.deepEqual([...s.values()], ["2026-11-18", "2026-11-20"]);
+  });
+
+  it("only uses added days when there are no usual training days", () => {
+    const changes = new Map([["2026-11-19", "EXTRA" as const]]);
+    const s = projectSchedule(q("a", "b"), { trainingWeekdays: [], today: MON, dayChanges: changes });
+    assert.equal(s.get("a"), "2026-11-19");
+    assert.equal(s.has("b"), false);
+  });
+
+  it("moves days, not workouts", () => {
+    const none = new Map();
+    // Off a usual day onto a rest day: the old day goes off, the new one is added.
+    assert.deepEqual([...moveDay(none, MON, "2026-11-17", weekdays)].sort(), [
+      [MON, "OFF"],
+      ["2026-11-17", "EXTRA"],
+    ]);
+    // Onto a day that's already a training day: only the old day goes off.
+    assert.deepEqual([...moveDay(none, MON, "2026-11-18", weekdays)], [[MON, "OFF"]]);
+    // Off an added day: it's simply not added any more.
+    assert.deepEqual([...moveDay(new Map([["2026-11-17", "EXTRA"]]), "2026-11-17", "2026-11-18", weekdays)], []);
+    // Back onto a day moved off: it's a training day again.
+    assert.deepEqual([...moveDay(new Map([[MON, "OFF"]]), "2026-11-18", MON, weekdays)], [["2026-11-18", "OFF"]]);
+    // Same day: nothing changes.
+    assert.deepEqual([...moveDay(none, MON, MON, weekdays)], []);
   });
 
   it("lists upcoming training days", () => {
